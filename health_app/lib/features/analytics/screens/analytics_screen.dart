@@ -4,9 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/health_card.dart';
-import '../../auth/providers/auth_provider.dart';
 
-// Analytics data provider
 final analyticsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final client = ref.watch(apiClientProvider);
   try {
@@ -40,7 +38,7 @@ class AnalyticsScreen extends ConsumerWidget {
     final analyticsAsync = ref.watch(analyticsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.transparent,
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Analytics')),
       body: analyticsAsync.when(
         loading: () => const Center(
@@ -58,21 +56,22 @@ class AnalyticsScreen extends ConsumerWidget {
         (data['water_7d'] as List).map((v) => (v as num).toDouble()));
     final sleepData = List<double>.from(
         (data['sleep_7d'] as List).map((v) => (v as num).toDouble()));
-    final scoreData = List<double>.from(
-        (data['health_scores_7d'] as List).map((v) => (v as num).toDouble()));
+    final scoreData = List<double>.from((data['health_scores_7d'] as List)
+        .map((v) => (v as num).toDouble()));
     final symptomFreq =
         data['symptom_frequency'] as Map<String, dynamic>? ?? {};
-    final adherence = (data['medication_adherence'] as num?)?.toDouble() ?? 0;
+    final adherence =
+        (data['medication_adherence'] as num?)?.toDouble() ?? 0;
 
-    final dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Health Score Timeline
-          const SectionHeader(title: 'Health Score (7 Days)'),
+          // ── Vitality score timeline ──────────────────────────────────
+          const SectionHeader(title: 'Vitality Score — 7 Days'),
           const SizedBox(height: 14),
           HealthCard(
             child: SizedBox(
@@ -98,8 +97,7 @@ class AnalyticsScreen extends ConsumerWidget {
                         getTitlesWidget: (v, _) => Text(
                           v.toInt().toString(),
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textHint),
+                              fontSize: 10, color: AppColors.textHint),
                         ),
                       ),
                     ),
@@ -109,8 +107,7 @@ class AnalyticsScreen extends ConsumerWidget {
                         getTitlesWidget: (v, _) => Text(
                           dayLabels[v.toInt() % 7],
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textHint),
+                              fontSize: 10, color: AppColors.textHint),
                         ),
                       ),
                     ),
@@ -122,21 +119,27 @@ class AnalyticsScreen extends ConsumerWidget {
                   borderData: FlBorderData(show: false),
                   lineBarsData: [
                     LineChartBarData(
-                      spots: List.generate(
-                          scoreData.length,
+                      spots: List.generate(scoreData.length,
                           (i) => FlSpot(i.toDouble(), scoreData[i])),
                       isCurved: true,
-                      color: AppColors.secondary,
+                      color: AppColors.primary,
                       barWidth: 3,
                       belowBarData: BarAreaData(
                         show: true,
-                        color: AppColors.secondary.withOpacity(0.12),
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primary.withOpacity(0.18),
+                            AppColors.primary.withOpacity(0.01),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
                       ),
                       dotData: FlDotData(
                         getDotPainter: (spot, _, __, ___) =>
                             FlDotCirclePainter(
                           radius: 4,
-                          color: AppColors.secondary,
+                          color: AppColors.primary,
                           strokeColor: Colors.white,
                           strokeWidth: 2,
                         ),
@@ -150,8 +153,8 @@ class AnalyticsScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // Water Intake Bar Chart
-          const SectionHeader(title: 'Water Intake (7 Days)'),
+          // ── Water intake ─────────────────────────────────────────────
+          const SectionHeader(title: 'Water Intake — 7 Days'),
           const SizedBox(height: 14),
           HealthCard(
             child: SizedBox(
@@ -166,10 +169,14 @@ class AnalyticsScreen extends ConsumerWidget {
                       barRods: [
                         BarChartRodData(
                           toY: waterData[i],
-                          color: waterData[i] >= 2500
-                              ? AppColors.success
-                              : AppColors.secondary,
-                          width: 24,
+                          gradient: LinearGradient(
+                            colors: waterData[i] >= 2500
+                                ? [AppColors.primary, AppColors.secondary]
+                                : [AppColors.chartBlue, AppColors.chartBlue.withOpacity(0.7)],
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                          ),
+                          width: 22,
                           borderRadius: const BorderRadius.vertical(
                               top: Radius.circular(6)),
                         ),
@@ -191,8 +198,7 @@ class AnalyticsScreen extends ConsumerWidget {
                         getTitlesWidget: (v, _) => Text(
                           dayLabels[v.toInt() % 7],
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textHint),
+                              fontSize: 10, color: AppColors.textHint),
                         ),
                       ),
                     ),
@@ -200,12 +206,11 @@ class AnalyticsScreen extends ConsumerWidget {
                       sideTitles: SideTitles(
                         showTitles: true,
                         interval: 1000,
-                        reservedSize: 40,
+                        reservedSize: 38,
                         getTitlesWidget: (v, _) => Text(
                           '${(v / 1000).toStringAsFixed(0)}L',
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textHint),
+                              fontSize: 10, color: AppColors.textHint),
                         ),
                       ),
                     ),
@@ -222,8 +227,8 @@ class AnalyticsScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // Sleep Pattern
-          const SectionHeader(title: 'Sleep Pattern (7 Days)'),
+          // ── Sleep pattern ────────────────────────────────────────────
+          const SectionHeader(title: 'Sleep Pattern — 7 Days'),
           const SizedBox(height: 14),
           HealthCard(
             child: SizedBox(
@@ -249,8 +254,7 @@ class AnalyticsScreen extends ConsumerWidget {
                         getTitlesWidget: (v, _) => Text(
                           '${v.toInt()}h',
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textHint),
+                              fontSize: 10, color: AppColors.textHint),
                         ),
                       ),
                     ),
@@ -260,8 +264,7 @@ class AnalyticsScreen extends ConsumerWidget {
                         getTitlesWidget: (v, _) => Text(
                           dayLabels[v.toInt() % 7],
                           style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textHint),
+                              fontSize: 10, color: AppColors.textHint),
                         ),
                       ),
                     ),
@@ -273,15 +276,21 @@ class AnalyticsScreen extends ConsumerWidget {
                   borderData: FlBorderData(show: false),
                   lineBarsData: [
                     LineChartBarData(
-                      spots: List.generate(
-                          sleepData.length,
+                      spots: List.generate(sleepData.length,
                           (i) => FlSpot(i.toDouble(), sleepData[i])),
                       isCurved: true,
-                      color: AppColors.accent,
+                      color: AppColors.chartPurple,
                       barWidth: 3,
                       belowBarData: BarAreaData(
                         show: true,
-                        color: AppColors.accent.withOpacity(0.12),
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.chartPurple.withOpacity(0.18),
+                            AppColors.chartPurple.withOpacity(0.01),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
                       ),
                       dotData: const FlDotData(show: true),
                     ),
@@ -290,9 +299,9 @@ class AnalyticsScreen extends ConsumerWidget {
                       spots: List.generate(
                           7, (i) => FlSpot(i.toDouble(), 8.0)),
                       isCurved: false,
-                      color: AppColors.success.withOpacity(0.5),
+                      color: AppColors.primary.withOpacity(0.4),
                       barWidth: 1.5,
-                      dashArray: [6, 4],
+                      dashArray: [5, 4],
                       dotData: const FlDotData(show: false),
                     ),
                   ],
@@ -303,69 +312,72 @@ class AnalyticsScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // Medication Adherence
+          // ── Medication adherence ─────────────────────────────────────
           const SectionHeader(title: 'Medication Adherence'),
           const SizedBox(height: 14),
           HealthCard(
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: Stack(
-                        alignment: Alignment.center,
+                SizedBox(
+                  width: 90,
+                  height: 90,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: adherence / 100,
+                        strokeWidth: 9,
+                        backgroundColor: AppColors.divider,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          adherence >= 80
+                              ? AppColors.success
+                              : AppColors.warning,
+                        ),
+                        strokeCap: StrokeCap.round,
+                      ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircularProgressIndicator(
-                            value: adherence / 100,
-                            strokeWidth: 8,
-                            backgroundColor: AppColors.divider,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              adherence >= 80
-                                  ? AppColors.success
-                                  : AppColors.warning,
-                            ),
-                            strokeCap: StrokeCap.round,
-                          ),
                           Text(
                             '${adherence.toInt()}%',
                             style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 17,
                               color: AppColors.textPrimary,
+                              letterSpacing: -0.5,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'This Month',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            adherence >= 80
-                                ? 'Great adherence! Keep it up.'
-                                : 'Try to take medications on time.',
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'This Month',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      Text(
+                        adherence >= 80
+                            ? 'Excellent adherence! Keep it up.'
+                            : 'Try to take medications on time.',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -373,19 +385,19 @@ class AnalyticsScreen extends ConsumerWidget {
 
           const SizedBox(height: 24),
 
-          // Symptom Frequency
+          // ── Symptom frequency ────────────────────────────────────────
           if (symptomFreq.isNotEmpty) ...[
-            const SectionHeader(title: 'Symptom Frequency'),
+            const SectionHeader(title: 'Top Symptoms'),
             const SizedBox(height: 14),
             HealthCard(
               child: Column(
                 children: symptomFreq.entries.map((entry) {
-                  final max = symptomFreq.values
+                  final maxVal = symptomFreq.values
                       .map((v) => (v as num).toDouble())
                       .reduce((a, b) => a > b ? a : b);
                   final freq = (entry.value as num).toDouble();
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: 14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -396,7 +408,7 @@ class AnalyticsScreen extends ConsumerWidget {
                               entry.key,
                               style: const TextStyle(
                                 fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                                fontWeight: FontWeight.w600,
                                 color: AppColors.textPrimary,
                               ),
                             ),
@@ -405,6 +417,7 @@ class AnalyticsScreen extends ConsumerWidget {
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -413,12 +426,12 @@ class AnalyticsScreen extends ConsumerWidget {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
-                            value: freq / max,
-                            minHeight: 8,
+                            value: freq / maxVal,
+                            minHeight: 7,
                             backgroundColor: AppColors.divider,
-                            valueColor:
-                                const AlwaysStoppedAnimation<Color>(
-                                    AppColors.error),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.chartCoral,
+                            ),
                           ),
                         ),
                       ],

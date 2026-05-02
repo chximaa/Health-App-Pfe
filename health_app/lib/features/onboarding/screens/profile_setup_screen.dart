@@ -114,7 +114,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.transparent,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: _currentPage > 0
             ? IconButton(

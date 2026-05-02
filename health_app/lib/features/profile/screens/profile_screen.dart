@@ -13,48 +13,60 @@ class ProfileScreen extends ConsumerWidget {
     final profile = ref.watch(profileProvider).valueOrNull;
     final auth = ref.watch(authProvider);
 
-    final name = profile?.fullName ?? 'User';
+    final name = profile?.fullName ?? 'Student';
     final email = auth is AuthAuthenticated ? auth.user.email : '';
+    final initials = name.isNotEmpty
+        ? name.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase()
+        : 'U';
 
     return Scaffold(
-      backgroundColor: AppColors.transparent,
+      backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            backgroundColor: AppColors.primary,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.primary, AppColors.secondary],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+          // ── Profile hero ─────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(28),
                 ),
-                child: SafeArea(
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 16),
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: Colors.white.withOpacity(0.2),
-                        child: Text(
-                          name.isNotEmpty ? name[0].toUpperCase() : 'U',
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                      // Avatar
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.3),
+                            width: 2,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            initials,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 14),
                       Text(
                         name,
                         style: const TextStyle(
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
@@ -64,7 +76,7 @@ class ProfileScreen extends ConsumerWidget {
                         email,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.7),
-                          fontSize: 14,
+                          fontSize: 13,
                         ),
                       ),
                     ],
@@ -73,34 +85,36 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ),
           ),
+
           SliverPadding(
             padding: const EdgeInsets.all(20),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // Health Metrics
+                // ── Health profile ─────────────────────────────────────
                 if (profile != null) ...[
                   const SectionHeader(title: 'Health Profile'),
                   const SizedBox(height: 14),
                   HealthCard(
+                    padding: EdgeInsets.zero,
                     child: Column(
                       children: [
-                        _MetricRow(
+                        _MetricTile(
                           icon: Icons.cake_outlined,
                           label: 'Age',
                           value: profile.age != null
                               ? '${profile.age} years'
                               : 'Not set',
                         ),
-                        const Divider(height: 24),
-                        _MetricRow(
+                        _Divider(),
+                        _MetricTile(
                           icon: Icons.monitor_weight_outlined,
                           label: 'Weight',
                           value: profile.weightKg != null
                               ? '${profile.weightKg} kg'
                               : 'Not set',
                         ),
-                        const Divider(height: 24),
-                        _MetricRow(
+                        _Divider(),
+                        _MetricTile(
                           icon: Icons.height_rounded,
                           label: 'Height',
                           value: profile.heightCm != null
@@ -108,16 +122,16 @@ class ProfileScreen extends ConsumerWidget {
                               : 'Not set',
                         ),
                         if (profile.bloodType != null) ...[
-                          const Divider(height: 24),
-                          _MetricRow(
+                          _Divider(),
+                          _MetricTile(
                             icon: Icons.bloodtype_outlined,
                             label: 'Blood Type',
                             value: profile.bloodType!,
                           ),
                         ],
                         if (profile.gender != null) ...[
-                          const Divider(height: 24),
-                          _MetricRow(
+                          _Divider(),
+                          _MetricTile(
                             icon: Icons.person_outline_rounded,
                             label: 'Gender',
                             value: profile.gender![0].toUpperCase() +
@@ -130,10 +144,10 @@ class ProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 20),
                 ],
 
-                // Medical conditions
+                // ── Medical conditions ─────────────────────────────────
                 if (profile?.medicalConditions.isNotEmpty == true) ...[
                   const SectionHeader(title: 'Medical Conditions'),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   HealthCard(
                     child: Wrap(
                       spacing: 8,
@@ -163,9 +177,9 @@ class ProfileScreen extends ConsumerWidget {
                   const SizedBox(height: 20),
                 ],
 
-                // Settings
+                // ── Settings ───────────────────────────────────────────
                 const SectionHeader(title: 'Settings'),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 HealthCard(
                   padding: EdgeInsets.zero,
                   child: Column(
@@ -175,19 +189,19 @@ class ProfileScreen extends ConsumerWidget {
                         label: 'Edit Profile',
                         onTap: () => context.push('/profile-setup'),
                       ),
-                      const Divider(height: 1, indent: 56),
+                      _Divider(),
                       _SettingsTile(
                         icon: Icons.notifications_outlined,
                         label: 'Notifications',
                         onTap: () {},
                       ),
-                      const Divider(height: 1, indent: 56),
+                      _Divider(),
                       _SettingsTile(
                         icon: Icons.download_outlined,
                         label: 'Export Health Data',
                         onTap: () {},
                       ),
-                      const Divider(height: 1, indent: 56),
+                      _Divider(),
                       _SettingsTile(
                         icon: Icons.privacy_tip_outlined,
                         label: 'Privacy & Security',
@@ -196,9 +210,10 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
 
-                // Logout
+                const SizedBox(height: 16),
+
+                // ── Sign out ───────────────────────────────────────────
                 HealthCard(
                   padding: EdgeInsets.zero,
                   withShadow: false,
@@ -207,10 +222,13 @@ class ProfileScreen extends ConsumerWidget {
                     label: 'Sign Out',
                     iconColor: AppColors.error,
                     labelColor: AppColors.error,
+                    showChevron: false,
                     onTap: () async {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (_) => AlertDialog(
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
                           title: const Text('Sign Out'),
                           content: const Text(
                               'Are you sure you want to sign out?'),
@@ -224,8 +242,8 @@ class ProfileScreen extends ConsumerWidget {
                               onPressed: () =>
                                   Navigator.pop(context, true),
                               child: const Text('Sign Out',
-                                  style:
-                                      TextStyle(color: AppColors.error)),
+                                  style: TextStyle(
+                                      color: AppColors.error)),
                             ),
                           ],
                         ),
@@ -235,7 +253,6 @@ class ProfileScreen extends ConsumerWidget {
                         context.go('/login');
                       }
                     },
-                    showChevron: false,
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -248,12 +265,19 @@ class ProfileScreen extends ConsumerWidget {
   }
 }
 
-class _MetricRow extends StatelessWidget {
+class _Divider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return const Divider(height: 1, indent: 56, endIndent: 0);
+  }
+}
+
+class _MetricTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
 
-  const _MetricRow({
+  const _MetricTile({
     required this.icon,
     required this.label,
     required this.value,
@@ -261,27 +285,38 @@ class _MetricRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.secondary, size: 20),
-        const SizedBox(width: 12),
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: 14,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.primary, size: 17),
           ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-            fontSize: 14,
+          const SizedBox(width: 14),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 14,
+            ),
           ),
-        ),
-      ],
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -305,20 +340,18 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = iconColor ?? AppColors.primary;
     return ListTile(
       onTap: onTap,
+      minLeadingWidth: 0,
       leading: Container(
-        width: 36,
-        height: 36,
+        width: 34,
+        height: 34,
         decoration: BoxDecoration(
-          color: (iconColor ?? AppColors.secondary).withOpacity(0.1),
+          color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(
-          icon,
-          color: iconColor ?? AppColors.secondary,
-          size: 18,
-        ),
+        child: Icon(icon, color: color, size: 17),
       ),
       title: Text(
         label,
@@ -330,7 +363,7 @@ class _SettingsTile extends StatelessWidget {
       ),
       trailing: showChevron
           ? const Icon(Icons.chevron_right_rounded,
-              color: AppColors.textHint)
+              color: AppColors.textHint, size: 20)
           : null,
     );
   }

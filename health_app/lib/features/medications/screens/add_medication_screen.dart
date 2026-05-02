@@ -105,7 +105,7 @@ class _AddMedicationScreenState extends ConsumerState<AddMedicationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.transparent,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Add Medication'),
         leading: IconButton(

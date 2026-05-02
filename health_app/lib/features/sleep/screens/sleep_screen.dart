@@ -75,7 +75,7 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
     final duration = _calculateDuration();
 
     return Scaffold(
-      backgroundColor: AppColors.transparent,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Sleep Tracker'),
         actions: [

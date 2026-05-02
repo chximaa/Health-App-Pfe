@@ -15,14 +15,14 @@ class HealthCard extends StatelessWidget {
     this.padding,
     this.color,
     this.onTap,
-    this.borderRadius = 24,
+    this.borderRadius = 20,
     this.withShadow = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final container = Container(
-      padding: padding ?? const EdgeInsets.all(20),
+      padding: padding ?? const EdgeInsets.all(18),
       decoration: cardDecoration(
         color: color,
         radius: borderRadius,
@@ -32,10 +32,7 @@ class HealthCard extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: container,
-      );
+      return GestureDetector(onTap: onTap, child: container);
     }
     return container;
   }
@@ -64,13 +61,13 @@ class StatTile extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 44,
-          height: 44,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
             color: iconBg ?? iconColor.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(13),
           ),
-          child: Icon(icon, color: iconColor, size: 22),
+          child: Icon(icon, color: iconColor, size: 20),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -95,6 +92,7 @@ class StatTile extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
                       ),
                     ),
                     if (unit != null)
@@ -137,7 +135,7 @@ class SectionHeader extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            fontSize: 18,
+            fontSize: 17,
             fontWeight: FontWeight.w700,
             color: AppColors.textPrimary,
             letterSpacing: -0.3,
@@ -146,6 +144,15 @@ class SectionHeader extends StatelessWidget {
         if (actionLabel != null)
           TextButton(
             onPressed: onAction,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              textStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: const Size(44, 32),
+            ),
             child: Text(actionLabel!),
           ),
       ],
