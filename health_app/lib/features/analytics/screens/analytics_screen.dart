@@ -1,9 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/health_card.dart';
+import '../../auth/providers/auth_provider.dart';
 
 final analyticsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final client = ref.watch(apiClientProvider);
