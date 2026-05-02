@@ -3,29 +3,44 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Warm sage-emerald palette (SensiaHealth brand)
-  static const Color background = Color(0xFFF5F3EE);
-  static const Color primary = Color(0xFF2E7D52);
-  static const Color secondary = Color(0xFF5FAD80);
-  static const Color accent = Color(0xFFE8704A);
-  static const Color muted = Color(0xFFA8C4B0);
-  static const Color light = Color(0xFFD4E8DB);
-  static const Color surface = Color(0xFFF0EDE7);
+  // Soft pastel palette — Capi-style
+  static const Color background = Color(0xFFFAFBF7);
+  static const Color primary = Color(0xFF6BBE8E);          // soft mint
+  static const Color primaryDark = Color(0xFF4FA876);
+  static const Color secondary = Color(0xFF9DD9B8);        // pale mint
+  static const Color accent = Color(0xFFFF9A8B);           // soft coral
+  static const Color muted = Color(0xFFD4E8DB);
+  static const Color light = Color(0xFFE8F5EC);
+  static const Color surface = Color(0xFFF3F6F0);
   static const Color cardSurface = Color(0xFFFFFFFF);
-  static const Color error = Color(0xFFD94F3D);
-  static const Color success = Color(0xFF2E7D52);
-  static const Color warning = Color(0xFFE8A020);
-  static const Color textPrimary = Color(0xFF1A2E22);
-  static const Color textSecondary = Color(0xFF5A7060);
-  static const Color textHint = Color(0xFF9BB5A3);
-  static const Color divider = Color(0xFFE5EDE8);
+  static const Color error = Color(0xFFFF7A6B);
+  static const Color success = Color(0xFF6BBE8E);
+  static const Color warning = Color(0xFFFFC371);
+  static const Color textPrimary = Color(0xFF26312A);
+  static const Color textSecondary = Color(0xFF6F7E72);
+  static const Color textHint = Color(0xFFAFB8B0);
+  static const Color divider = Color(0xFFEDF1EC);
   static const Color transparent = Color(0x00000000);
 
-  // Chart / accent palette
-  static const Color chartBlue = Color(0xFF4A90D9);
-  static const Color chartPurple = Color(0xFF8B5CF6);
-  static const Color chartCoral = Color(0xFFE8704A);
-  static const Color chartTeal = Color(0xFF14B8A6);
+  // Pastel category palette (Capi-inspired)
+  static const Color sleepBg = Color(0xFFFFF5D6);          // soft butter yellow
+  static const Color sleepFg = Color(0xFFE8B23A);
+  static const Color waterBg = Color(0xFFE0F0FF);          // sky blue
+  static const Color waterFg = Color(0xFF4FA3E8);
+  static const Color foodBg = Color(0xFFFFE5E5);           // blush pink
+  static const Color foodFg = Color(0xFFEC7A8E);
+  static const Color exerciseBg = Color(0xFFD8F0DD);       // pale mint
+  static const Color exerciseFg = Color(0xFF4FA876);
+  static const Color medsBg = Color(0xFFEEE5FF);           // lavender
+  static const Color medsFg = Color(0xFF8B7BD8);
+  static const Color mindBg = Color(0xFFFFE4D1);           // peach
+  static const Color mindFg = Color(0xFFE89466);
+
+  // Chart accent (kept for compatibility)
+  static const Color chartBlue = Color(0xFF4FA3E8);
+  static const Color chartPurple = Color(0xFF8B7BD8);
+  static const Color chartCoral = Color(0xFFEC7A8E);
+  static const Color chartTeal = Color(0xFF4FBBA8);
 }
 
 class AppTheme {

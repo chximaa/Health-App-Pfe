@@ -1,15 +1,13 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../shared/widgets/health_card.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../water/providers/water_provider.dart';
 import '../../sleep/providers/sleep_provider.dart';
-import '../widgets/animated_character_widget.dart';
-import '../widgets/feature_card_widget.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -35,309 +33,181 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final waterState = ref.watch(waterProvider);
     final sleepState = ref.watch(sleepProvider);
 
-    final greeting = _getGreeting();
     final name = profile?.fullName?.split(' ').first ?? 'there';
-    final healthScore = _calculateHealthScore(waterState, sleepState);
-    final mood = healthScore >= 75 ? 'thriving' : healthScore >= 50 ? 'growing' : 'wilting';
+    final initials = (profile?.fullName ?? 'U')
+        .trim()
+        .split(' ')
+        .where((s) => s.isNotEmpty)
+        .take(2)
+        .map((s) => s[0])
+        .join()
+        .toUpperCase();
+
+    final waterPct =
+        (waterState.totalMl / AppConstants.dailyWaterGoalMl).clamp(0.0, 1.0);
+    final sleepPct =
+        (sleepState.lastNightHours / AppConstants.recommendedSleepHours)
+            .clamp(0.0, 1.0);
+    final medsPct = 0.66; // placeholder until med adherence wired
+    final planPct = ((waterPct + sleepPct + medsPct) / 3).clamp(0.0, 1.0);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: CustomScrollView(
-        slivers: [
-          // ── Top app bar ──────────────────────────────────────────────────
-          SliverAppBar(
-            expandedHeight: 0,
-            floating: true,
-            snap: true,
-            backgroundColor: AppColors.background,
-            elevation: 0,
-            title: Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$greeting, $name',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const Text(
-                      'How are you feeling today?',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.only(right: 16),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.notifications_outlined,
-                    color: AppColors.textPrimary,
-                    size: 22,
-                  ),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppColors.cardSurface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    minimumSize: const Size(44, 44),
-                  ),
-                  onPressed: () {},
-                ),
-              ),
+      body: SafeArea(
+        bottom: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Top bar: avatar + greeting + notif ──────────────────────
+              _TopBar(initials: initials, name: name)
+                  .animate()
+                  .fadeIn(duration: 350.ms),
+
+              const SizedBox(height: 22),
+
+              // ── Plan-of-day hero card ───────────────────────────────────
+              _PlanHero(percent: planPct)
+                  .animate()
+                  .fadeIn(delay: 80.ms, duration: 400.ms)
+                  .slideY(begin: 0.08, end: 0),
+
+              const SizedBox(height: 22),
+
+              // ── Week strip ──────────────────────────────────────────────
+              _WeekStrip()
+                  .animate()
+                  .fadeIn(delay: 140.ms, duration: 400.ms),
+
+              const SizedBox(height: 22),
+
+              // ── 2x2 colored category grid ───────────────────────────────
+              _CategoryGrid(
+                waterPct: waterPct,
+                sleepPct: sleepPct,
+                waterMl: waterState.totalMl,
+                sleepHours: sleepState.lastNightHours,
+              ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+
+              const SizedBox(height: 22),
+
+              // ── Daily tip ──────────────────────────────────────────────
+              const _TipCard()
+                  .animate()
+                  .fadeIn(delay: 280.ms, duration: 400.ms),
             ],
           ),
-
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // ── Hero vitality card ────────────────────────────────────
-                _VitalityCard(
-                  healthScore: healthScore.toDouble(),
-                  mood: mood,
-                  name: name,
-                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0),
-
-                const SizedBox(height: 20),
-
-                // ── Quick-log habit strip ─────────────────────────────────
-                _QuickLogStrip(
-                  waterState: waterState,
-                  sleepState: sleepState,
-                ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-
-                const SizedBox(height: 24),
-
-                // ── Features grid ─────────────────────────────────────────
-                SectionHeader(
-                  title: 'Health Tools',
-                  actionLabel: 'See all',
-                  onAction: () {},
-                ),
-                const SizedBox(height: 14),
-                _FeaturesGrid(waterState: waterState)
-                    .animate()
-                    .fadeIn(delay: 200.ms, duration: 400.ms),
-
-                const SizedBox(height: 24),
-
-                // ── Health tip ────────────────────────────────────────────
-                SectionHeader(title: "Today's Tip"),
-                const SizedBox(height: 12),
-                _HealthTipCard()
-                    .animate()
-                    .fadeIn(delay: 300.ms, duration: 400.ms),
-
-                const SizedBox(height: 16),
-              ]),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
-  int _calculateHealthScore(WaterState water, SleepState sleep) {
-    double score = 60;
-    score += (water.totalMl / AppConstants.dailyWaterGoalMl).clamp(0, 1) * 20;
-    score +=
-        (sleep.lastNightHours / AppConstants.recommendedSleepHours).clamp(0, 1) * 20;
-    return score.clamp(0, 100).toInt();
-  }
 }
 
-// ─── Vitality hero card ──────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// Top bar
+// ──────────────────────────────────────────────────────────────────────────────
 
-class _VitalityCard extends StatelessWidget {
-  final double healthScore;
-  final String mood;
+class _TopBar extends StatelessWidget {
+  final String initials;
   final String name;
 
-  const _VitalityCard({
-    required this.healthScore,
-    required this.mood,
-    required this.name,
-  });
+  const _TopBar({required this.initials, required this.name});
 
-  String get _statusLabel {
-    if (healthScore >= 80) return 'Thriving';
-    if (healthScore >= 60) return 'Growing';
-    return 'Needs care';
+  String get _greeting {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(22),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Plant mascot
-          AnimatedCharacterWidget(size: 90, mood: mood),
-
-          const SizedBox(width: 20),
-
-          // Score + status
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Vitality',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${healthScore.toInt()}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 52,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -3,
-                        height: 1,
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 8, left: 4),
-                      child: Text(
-                        '/100',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _statusLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: healthScore / 100,
-                    minHeight: 4,
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Quick-log habit strip ───────────────────────────────────────────────────
-
-class _QuickLogStrip extends ConsumerWidget {
-  final WaterState waterState;
-  final SleepState sleepState;
-
-  const _QuickLogStrip({
-    required this.waterState,
-    required this.sleepState,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final waterPct =
-        waterState.totalMl / AppConstants.dailyWaterGoalMl;
-    final sleepPct =
-        sleepState.lastNightHours / AppConstants.recommendedSleepHours;
-
     return Row(
       children: [
-        Expanded(
-          child: _HabitTile(
-            label: 'Water',
-            value: '${(waterState.totalMl / 1000).toStringAsFixed(1)}L',
-            goal: '${(AppConstants.dailyWaterGoalMl / 1000).toInt()}L goal',
-            icon: Icons.water_drop_rounded,
-            color: AppColors.chartBlue,
-            progress: waterPct,
-            onTap: () {},
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.light,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.18),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            initials.isEmpty ? 'U' : initials,
+            style: const TextStyle(
+              color: AppColors.primaryDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+            ),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _HabitTile(
-            label: 'Sleep',
-            value: '${sleepState.lastNightHours.toStringAsFixed(1)}h',
-            goal: '${AppConstants.recommendedSleepHours.toInt()}h goal',
-            icon: Icons.bedtime_rounded,
-            color: AppColors.chartPurple,
-            progress: sleepPct,
-            onTap: () => context.go('/sleep'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _greeting,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Hi, $name 👋',
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _HabitTile(
-            label: 'Meds',
-            value: 'Today',
-            goal: 'Tap to check',
-            icon: Icons.medication_rounded,
-            color: AppColors.secondary,
-            progress: 0.75,
-            onTap: () => context.go('/medications'),
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.textPrimary.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(Icons.notifications_outlined,
+                  size: 20, color: AppColors.textPrimary),
+              Positioned(
+                top: 12,
+                right: 13,
+                child: Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -345,22 +215,365 @@ class _QuickLogStrip extends ConsumerWidget {
   }
 }
 
-class _HabitTile extends StatelessWidget {
+// ──────────────────────────────────────────────────────────────────────────────
+// Plan hero — circular progress on green gradient
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _PlanHero extends StatelessWidget {
+  final double percent;
+  const _PlanHero({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final pctInt = (percent * 100).round();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF8AD3A8), Color(0xFF6BBE8E)],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.25),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Circular ring
+          SizedBox(
+            width: 96,
+            height: 96,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CustomPaint(
+                  size: const Size(96, 96),
+                  painter: _RingPainter(
+                    progress: percent,
+                    bg: Colors.white.withOpacity(0.25),
+                    fg: Colors.white,
+                    stroke: 8,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$pctInt%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 22,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'My plan for today',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${(percent * 3).floor()} of 3 complete',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.22),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.bolt_rounded,
+                          color: Colors.white, size: 13),
+                      SizedBox(width: 4),
+                      Text(
+                        'Keep going!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final Color bg;
+  final Color fg;
+  final double stroke;
+
+  _RingPainter({
+    required this.progress,
+    required this.bg,
+    required this.fg,
+    this.stroke = 8,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = (size.width - stroke) / 2;
+
+    final bgPaint = Paint()
+      ..color = bg
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+
+    final fgPaint = Paint()
+      ..color = fg
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(c, r, bgPaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: c, radius: r),
+      -math.pi / 2,
+      progress.clamp(0, 1) * 2 * math.pi,
+      false,
+      fgPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter old) =>
+      old.progress != progress ||
+      old.bg != bg ||
+      old.fg != fg ||
+      old.stroke != stroke;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Week strip
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _WeekStrip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final monday = today.subtract(Duration(days: today.weekday - 1));
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(7, (i) {
+        final day = monday.add(Duration(days: i));
+        final isToday = day.day == today.day &&
+            day.month == today.month &&
+            day.year == today.year;
+        return Column(
+          children: [
+            Text(
+              labels[i],
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isToday
+                    ? AppColors.primaryDark
+                    : AppColors.textHint,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isToday ? AppColors.primary : Colors.transparent,
+                shape: BoxShape.circle,
+                boxShadow: isToday
+                    ? [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                '${day.day}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isToday ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Pastel category grid
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _CategoryGrid extends StatelessWidget {
+  final double waterPct;
+  final double sleepPct;
+  final int waterMl;
+  final double sleepHours;
+
+  const _CategoryGrid({
+    required this.waterPct,
+    required this.sleepPct,
+    required this.waterMl,
+    required this.sleepHours,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Row 1: Sleep + Water
+        Row(
+          children: [
+            Expanded(
+              child: _CategoryCard(
+                label: 'Sleep',
+                value: '${sleepHours.toStringAsFixed(1)}h',
+                emoji: '😴',
+                bg: AppColors.sleepBg,
+                fg: AppColors.sleepFg,
+                visualization: _SleepBars(),
+                onTap: () => context.go('/sleep'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _CategoryCard(
+                label: 'Water',
+                value: '${(waterMl / 1000).toStringAsFixed(1)} L',
+                emoji: '💧',
+                bg: AppColors.waterBg,
+                fg: AppColors.waterFg,
+                visualization: _WaterWave(progress: waterPct),
+                onTap: () {},
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Row 2: Symptoms + Medications
+        Row(
+          children: [
+            Expanded(
+              child: _CategoryCard(
+                label: 'Symptoms',
+                value: 'Log',
+                emoji: '🩺',
+                bg: AppColors.foodBg,
+                fg: AppColors.foodFg,
+                visualization: _CalorieRing(),
+                onTap: () => context.go('/symptoms'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _CategoryCard(
+                label: 'Meds',
+                value: 'Track',
+                emoji: '💊',
+                bg: AppColors.medsBg,
+                fg: AppColors.medsFg,
+                visualization: _PillsIcon(),
+                onTap: () => context.go('/medications'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Row 3: Analytics + Mind
+        Row(
+          children: [
+            Expanded(
+              child: _CategoryCard(
+                label: 'Analytics',
+                value: 'View',
+                emoji: '📊',
+                bg: AppColors.exerciseBg,
+                fg: AppColors.exerciseFg,
+                visualization: _ExerciseDots(),
+                onTap: () => context.go('/analytics'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _CategoryCard(
+                label: 'AI Insights',
+                value: 'Predict',
+                emoji: '🧠',
+                bg: AppColors.mindBg,
+                fg: AppColors.mindFg,
+                visualization: _SparkLine(),
+                onTap: () => context.go('/symptoms'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoryCard extends StatelessWidget {
   final String label;
   final String value;
-  final String goal;
-  final IconData icon;
-  final Color color;
-  final double progress;
+  final String emoji;
+  final Color bg;
+  final Color fg;
+  final Widget visualization;
   final VoidCallback onTap;
 
-  const _HabitTile({
+  const _CategoryCard({
     required this.label,
     required this.value,
-    required this.goal,
-    required this.icon,
-    required this.color,
-    required this.progress,
+    required this.emoji,
+    required this.bg,
+    required this.fg,
+    required this.visualization,
     required this.onTap,
   });
 
@@ -369,60 +582,55 @@ class _HabitTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        height: 138,
         padding: const EdgeInsets.all(14),
-        decoration: cardDecoration(radius: 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Stack(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: color, size: 16),
-                ),
-                Text(
-                  '${(progress * 100).clamp(0, 100).toInt()}%',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
-                ),
-              ],
+            // emoji top-right
+            Align(
+              alignment: Alignment.topRight,
+              child: Text(emoji, style: const TextStyle(fontSize: 22)),
             ),
-            const SizedBox(height: 10),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-                letterSpacing: -0.5,
+            // label + value bottom-left
+            Align(
+              alignment: Alignment.bottomLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: fg,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress.clamp(0.0, 1.0),
-                minHeight: 4,
-                backgroundColor: color.withOpacity(0.12),
-                valueColor: AlwaysStoppedAnimation<Color>(color),
+            // visualization bottom-right
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: SizedBox(
+                width: 60,
+                height: 36,
+                child: visualization,
               ),
             ),
           ],
@@ -432,149 +640,182 @@ class _HabitTile extends StatelessWidget {
   }
 }
 
-// ─── Features grid ───────────────────────────────────────────────────────────
+// Tiny mini-visualizations for each card
 
-class _FeaturesGrid extends StatelessWidget {
-  final WaterState waterState;
-
-  const _FeaturesGrid({required this.waterState});
-
+class _SleepBars extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.08,
-      children: [
-        FeatureCard(
-          title: 'Symptoms',
-          subtitle: 'Log & analyse',
-          icon: Icons.health_and_safety_outlined,
-          iconColor: AppColors.chartCoral,
-          bgColor: const Color(0xFFFFF5F2),
-          onTap: () => context.go('/symptoms'),
-        ),
-        FeatureCard(
-          title: 'Analytics',
-          subtitle: 'View your trends',
-          icon: Icons.bar_chart_rounded,
-          iconColor: AppColors.chartBlue,
-          bgColor: const Color(0xFFF0F6FF),
-          onTap: () => context.go('/analytics'),
-        ),
-        FeatureCard(
-          title: 'Medications',
-          subtitle: 'Track your meds',
-          icon: Icons.medication_outlined,
-          iconColor: AppColors.secondary,
-          bgColor: const Color(0xFFF0FAF4),
-          onTap: () => context.go('/medications'),
-        ),
-        FeatureCard(
-          title: 'Sleep',
-          subtitle: 'Log your rest',
-          icon: Icons.bedtime_outlined,
-          iconColor: AppColors.chartPurple,
-          bgColor: const Color(0xFFF7F0FF),
-          onTap: () => context.go('/sleep'),
-        ),
-        FeatureCard(
-          title: 'Hydration',
-          subtitle:
-              '${waterState.totalMl} / ${AppConstants.dailyWaterGoalMl} ml',
-          icon: Icons.water_drop_outlined,
-          iconColor: AppColors.chartBlue,
-          bgColor: const Color(0xFFF0F6FF),
-          badge: waterState.totalMl >= AppConstants.dailyWaterGoalMl
-              ? const Icon(Icons.check_circle_rounded,
-                  color: Color(0xFF2E7D52), size: 16)
-              : null,
-          onTap: () {},
-        ),
-        FeatureCard(
-          title: 'AI Predict',
-          subtitle: 'Disease insights',
-          icon: Icons.psychology_rounded,
-          iconColor: AppColors.chartTeal,
-          bgColor: const Color(0xFFF0FAFA),
-          onTap: () => context.go('/symptoms'),
-        ),
-      ],
+    final heights = [0.4, 0.7, 1.0, 0.6, 0.85, 0.5];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: heights
+          .map((h) => Container(
+                width: 5,
+                height: 30 * h,
+                decoration: BoxDecoration(
+                  color: AppColors.sleepFg,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ))
+          .toList(),
     );
   }
 }
 
-// ─── Health tip card ─────────────────────────────────────────────────────────
-
-class _HealthTipCard extends StatelessWidget {
-  final List<Map<String, dynamic>> _tips = const [
-    {
-      'title': 'Stay Hydrated',
-      'body': 'Drinking enough water daily can boost your energy and focus by up to 14%.',
-      'icon': Icons.water_drop_rounded,
-      'gradient': [Color(0xFF4A90D9), Color(0xFF357ABD)],
-    },
-    {
-      'title': 'Move Your Body',
-      'body': 'A 20-minute walk lowers cortisol, the stress hormone, significantly.',
-      'icon': Icons.directions_walk_rounded,
-      'gradient': [Color(0xFF2E7D52), Color(0xFF5FAD80)],
-    },
-    {
-      'title': 'Prioritise Sleep',
-      'body': '7–9 hours of sleep each night strengthens your immune system and memory.',
-      'icon': Icons.bedtime_rounded,
-      'gradient': [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
-    },
-    {
-      'title': 'Breathe Deeply',
-      'body': 'Box breathing (4-4-4-4) activates your parasympathetic nervous system.',
-      'icon': Icons.air_rounded,
-      'gradient': [Color(0xFF14B8A6), Color(0xFF0F766E)],
-    },
-  ];
+class _WaterWave extends StatelessWidget {
+  final double progress;
+  const _WaterWave({required this.progress});
 
   @override
   Widget build(BuildContext context) {
-    final tip = _tips[DateTime.now().day % _tips.length];
-    final gradientColors = tip['gradient'] as List<Color>;
-
     return Container(
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            gradientColors[0].withOpacity(0.12),
-            gradientColors[1].withOpacity(0.06),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: AppColors.waterFg.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            height: 36 * progress.clamp(0.15, 1.0),
+            decoration: BoxDecoration(
+              color: AppColors.waterFg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _CalorieRing extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _RingPainter(
+        progress: 0.65,
+        bg: AppColors.foodFg.withOpacity(0.2),
+        fg: AppColors.foodFg,
+        stroke: 5,
+      ),
+    );
+  }
+}
+
+class _PillsIcon extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: AppColors.medsFg.withOpacity(0.2),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(Icons.medication_rounded,
+            color: AppColors.medsFg, size: 20),
+      ),
+    );
+  }
+}
+
+class _ExerciseDots extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: List.generate(5, (i) {
+        return Positioned(
+          left: i * 11.0,
+          top: 8 + (i.isEven ? 6 : 0).toDouble(),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: AppColors.exerciseFg
+                  .withOpacity(0.3 + (i * 0.15).clamp(0, 0.7)),
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _SparkLine extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _SparkPainter(),
+    );
+  }
+}
+
+class _SparkPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.mindFg
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+
+    final pts = [0.7, 0.5, 0.6, 0.3, 0.45, 0.2];
+    final path = Path();
+    for (var i = 0; i < pts.length; i++) {
+      final x = i * size.width / (pts.length - 1);
+      final y = pts[i] * size.height;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tip card
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _TipCard extends StatelessWidget {
+  const _TipCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: gradientColors[0].withOpacity(0.2),
-          width: 1,
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.textPrimary.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradientColors,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: AppColors.light,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(tip['icon'] as IconData,
-                color: Colors.white, size: 22),
+            alignment: Alignment.center,
+            child: const Text('💡', style: TextStyle(fontSize: 22)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -582,20 +823,22 @@ class _HealthTipCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  tip['title'] as String,
+                  'Tip of the day',
                   style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: gradientColors[0],
+                    fontSize: 11,
+                    color: AppColors.textHint,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  tip['body'] as String,
-                  style: const TextStyle(
+                const SizedBox(height: 3),
+                const Text(
+                  'A 20-min walk daily improves mood and lowers stress.',
+                  style: TextStyle(
                     fontSize: 13,
-                    color: AppColors.textSecondary,
-                    height: 1.45,
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
                   ),
                 ),
               ],
