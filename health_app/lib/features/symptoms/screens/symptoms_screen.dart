@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_constants.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../shared/widgets/custom_button.dart';
-import '../../../shared/widgets/health_card.dart';
-import '../providers/symptoms_provider.dart';
 
 class SymptomsScreen extends ConsumerStatefulWidget {
   const SymptomsScreen({super.key});
@@ -14,602 +11,478 @@ class SymptomsScreen extends ConsumerStatefulWidget {
   ConsumerState<SymptomsScreen> createState() => _SymptomsScreenState();
 }
 
-class _SymptomsScreenState extends ConsumerState<SymptomsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
-  final _notesCtrl = TextEditingController();
+class _SymptomsScreenState extends ConsumerState<SymptomsScreen> {
+  final Set<String> _selected = {'🌡️ Fever', '🤕 Headache', '😴 Fatigue'};
+  double _severity = 6;
+  bool _analyzed = true;
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
-    Future.microtask(
-        () => ref.read(symptomsProvider.notifier).loadRecentLogs());
-  }
+  static const List<String> _allSymptoms = [
+    '🌡️ Fever',
+    '🤕 Headache',
+    '😮‍💨 Cough',
+    '😴 Fatigue',
+    '🤢 Nausea',
+    '🫁 Sore throat',
+    '😵 Dizziness',
+    '😰 Stress',
+    '💧 Runny nose',
+    '🦴 Body aches',
+    '😶‍🌫️ Chest pain',
+    '🥴 Vomiting',
+  ];
+
+  static const List<_AiResult> _results = [
+    _AiResult(
+      condition: 'Viral Flu (Influenza)',
+      pct: 82,
+      note: '💊 Paracetamol 500mg · Rest · Fluids',
+    ),
+    _AiResult(
+      condition: 'Common Cold',
+      pct: 64,
+      note: '💊 Vitamin C · Warm liquids',
+    ),
+    _AiResult(
+      condition: 'Stress-Related Fatigue',
+      pct: 45,
+      note: '🧘 Breathing exercises · Sleep hygiene',
+    ),
+  ];
 
   @override
   void dispose() {
-    _tabCtrl.dispose();
-    _notesCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _logAndPredict() async {
-    final notifier = ref.read(symptomsProvider.notifier);
-    final logged = await notifier.logSymptoms(notes: _notesCtrl.text);
-    if (logged) {
-      await notifier.predict();
-      _tabCtrl.animateTo(1);
-    }
-  }
+  List<String> get _filtered => _searchQuery.isEmpty
+      ? _allSymptoms
+      : _allSymptoms
+          .where((s) =>
+              s.toLowerCase().contains(_searchQuery.toLowerCase()))
+          .toList();
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(symptomsProvider);
-
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Symptoms'),
-        backgroundColor: AppColors.background,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: TabBar(
-              controller: _tabCtrl,
-              labelColor: Colors.white,
-              unselectedLabelColor: AppColors.textSecondary,
-              indicator: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              indicatorSize: TabBarIndicatorSize.tab,
-              splashFactory: NoSplash.splashFactory,
-              dividerColor: Colors.transparent,
-              labelStyle: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-              tabs: const [
-                Tab(text: 'Log Symptoms'),
-                Tab(text: 'AI Insights'),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabCtrl,
+      body: Column(
         children: [
-          _buildLogTab(state),
-          _buildInsightsTab(state),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLogTab(SymptomsState state) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'What are you\nexperiencing?',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.5,
-              height: 1.2,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Select all symptoms that apply',
-            style: TextStyle(
-                color: AppColors.textSecondary, fontSize: 14),
-          ),
-          const SizedBox(height: 20),
-
-          // Symptom chips
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: AppConstants.symptomList.map((symptom) {
-              final selected =
-                  ref.read(symptomsProvider.notifier).isSelected(symptom);
-              return GestureDetector(
-                onTap: () =>
-                    ref.read(symptomsProvider.notifier).toggleSymptom(symptom),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.primary
-                        : AppColors.cardSurface,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: selected
-                          ? AppColors.primary
-                          : AppColors.divider,
-                      width: 1.5,
-                    ),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            )
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    symptom,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: selected
-                          ? Colors.white
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-
-          // Severity sliders
-          if (state.selected.isNotEmpty) ...[
-            const SizedBox(height: 28),
-            const Text(
-              'Set Severity',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...state.selected.map((symptom) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
-                decoration: cardDecoration(radius: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // ── Fixed header ────────────────────────────────────────────────
+          Container(
+            color: AppColors.card,
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          symptom.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                            fontSize: 14,
+                        RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Symptom ',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.plum900,
+                                ),
+                              ),
+                              TextSpan(
+                                text: 'Check',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.plum500,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _severityColor(symptom.severity)
-                                .withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${symptom.severity}/10',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: _severityColor(symptom.severity),
-                            ),
-                          ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Select all that apply — AI analyses potential causes',
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.neutral500),
                         ),
                       ],
                     ),
-                    Slider(
-                      value: symptom.severity.toDouble(),
-                      min: 1,
-                      max: 10,
-                      divisions: 9,
-                      activeColor: _severityColor(symptom.severity),
-                      inactiveColor:
-                          _severityColor(symptom.severity).withOpacity(0.15),
-                      onChanged: (v) => ref
-                          .read(symptomsProvider.notifier)
-                          .updateSeverity(symptom.name, v.round()),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          ],
-
-          const SizedBox(height: 20),
-          TextFormField(
-            controller: _notesCtrl,
-            maxLines: 3,
-            style: const TextStyle(
-              fontSize: 14,
-              color: AppColors.textPrimary,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Any additional context... (optional)',
-              hintStyle: const TextStyle(
-                  color: AppColors.textHint, fontSize: 14),
-              filled: true,
-              fillColor: AppColors.cardSurface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    const BorderSide(color: AppColors.divider),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    const BorderSide(color: AppColors.divider),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(
-                    color: AppColors.primary, width: 2),
-              ),
-              contentPadding: const EdgeInsets.all(16),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          if (state.error != null)
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.error.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                    color: AppColors.error.withOpacity(0.2)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline,
-                      color: AppColors.error, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(state.error!,
-                        style: const TextStyle(
-                            color: AppColors.error, fontSize: 13)),
                   ),
+                  // Search bar
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppColors.border, width: 1.5),
+                      ),
+                      child: TextField(
+                        controller: _searchCtrl,
+                        onChanged: (v) => setState(() => _searchQuery = v),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppColors.neutral700,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: 'Search symptoms...',
+                          prefixIcon: Padding(
+                            padding: EdgeInsets.only(left: 14, right: 8),
+                            child: Text('🔍', style: TextStyle(fontSize: 15)),
+                          ),
+                          prefixIconConstraints:
+                              BoxConstraints(minWidth: 0, minHeight: 0),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 13),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
                 ],
               ),
             ),
-
-          const SizedBox(height: 12),
-          GradientButton(
-            label: state.selected.isEmpty
-                ? 'Select symptoms first'
-                : 'Analyse with AI',
-            isLoading: state.isLoading || state.isPredicting,
-            onPressed: state.selected.isEmpty ? null : _logAndPredict,
           ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildInsightsTab(SymptomsState state) {
-    if (state.isPredicting) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 44,
-              height: 44,
-              child: CircularProgressIndicator(
-                color: AppColors.primary,
-                strokeWidth: 3,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Analysing your symptoms…',
-              style: TextStyle(
-                  color: AppColors.textSecondary, fontSize: 15),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (state.latestPrediction == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.psychology_outlined,
-                  size: 36, color: AppColors.muted),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'No analysis yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                'Log your symptoms and tap Analyse to get AI-powered health insights.',
-                style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final predictions =
-        state.latestPrediction!['predictions'] as List? ?? [];
-    final tips =
-        state.latestPrediction!['health_tips'] as List? ?? [];
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Analysis Results',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Based on your reported symptoms',
-            style: TextStyle(
-                color: AppColors.textSecondary, fontSize: 14),
-          ),
-          const SizedBox(height: 20),
-          ...List.generate(predictions.length, (i) {
-            final p = predictions[i] as Map<String, dynamic>;
-            return _PredictionCard(
-              rank: i + 1,
-              disease: p['disease'] as String,
-              confidence: (p['confidence'] as num).toDouble(),
-              actions:
-                  List<String>.from(p['actions'] as List? ?? []),
-            )
-                .animate()
-                .fadeIn(delay: (i * 80).ms)
-                .slideX(begin: 0.15, end: 0);
-          }),
-          if (tips.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            const SectionHeader(title: 'Health Tips'),
-            const SizedBox(height: 12),
-            ...tips.asMap().entries.map((e) => Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.light.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: AppColors.primary.withOpacity(0.1)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.lightbulb_rounded,
-                          color: AppColors.primary, size: 16),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          e.value as String,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textPrimary,
-                            height: 1.45,
+          // ── Scrollable content ──────────────────────────────────────────
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Symptom chips
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _filtered.map((s) {
+                        final isOn = _selected.contains(s);
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              if (isOn) {
+                                _selected.remove(s);
+                              } else {
+                                _selected.add(s);
+                              }
+                            });
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isOn ? AppColors.plum700 : AppColors.card,
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: isOn
+                                    ? AppColors.plum700
+                                    : AppColors.border,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              s,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isOn
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: isOn
+                                    ? Colors.white
+                                    : AppColors.neutral600,
+                              ),
+                            ),
                           ),
+                        );
+                      }).toList(),
+                    ),
+                  ).animate().fadeIn(duration: 300.ms),
+
+                  // Severity card
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: _SeverityCard(
+                      severity: _severity,
+                      onChanged: (v) => setState(() => _severity = v),
+                    ),
+                  ).animate().fadeIn(delay: 80.ms, duration: 300.ms),
+
+                  // Analyze button
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => setState(() => _analyzed = true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.sage600,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
                         ),
+                        child: const Text('🧠 Analyse with AI'),
                       ),
-                    ],
-                  ),
-                )),
-          ],
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.warning.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: AppColors.warning.withOpacity(0.25)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline,
-                    color: AppColors.warning, size: 16),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Not a medical diagnosis. Always consult a healthcare professional.',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 12,
-                      height: 1.4,
                     ),
                   ),
-                ),
-              ],
+
+                  // AI Results
+                  if (_analyzed && _selected.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: _AiAnalysisCard(results: _results),
+                    )
+                        .animate()
+                        .fadeIn(delay: 100.ms, duration: 350.ms)
+                        .slideY(begin: 0.05, end: 0),
+
+                  const SizedBox(height: 100),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  Color _severityColor(int severity) {
-    if (severity <= 3) return AppColors.success;
-    if (severity <= 6) return AppColors.warning;
-    return AppColors.error;
   }
 }
 
-class _PredictionCard extends StatelessWidget {
-  final int rank;
-  final String disease;
-  final double confidence;
-  final List<String> actions;
+// ─── Severity Card ────────────────────────────────────────────────────────────
 
-  const _PredictionCard({
-    required this.rank,
-    required this.disease,
-    required this.confidence,
-    required this.actions,
-  });
+class _SeverityCard extends StatelessWidget {
+  final double severity;
+  final ValueChanged<double> onChanged;
 
-  Color get _confidenceColor {
-    if (confidence >= 0.7) return AppColors.error;
-    if (confidence >= 0.4) return AppColors.warning;
-    return AppColors.success;
-  }
+  const _SeverityCard({required this.severity, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(18),
-      decoration: cardDecoration(radius: 18),
+      decoration: cardDecoration(),
+      padding: const EdgeInsets.all(16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: _confidenceColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    '#$rank',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: _confidenceColor,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  disease,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _confidenceColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${(confidence * 100).toInt()}%',
-                  style: TextStyle(
-                    color: _confidenceColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
+              Text('Severity level', style: AppTextStyles.bodySemiBold),
+              Text(
+                '${severity.round()} / 10',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.plum800,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: confidence,
-              minHeight: 5,
-              backgroundColor: AppColors.divider,
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(_confidenceColor),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 8,
+              activeTrackColor: AppColors.plum700,
+              inactiveTrackColor: AppColors.border,
+              thumbColor: AppColors.plum700,
+              overlayColor: AppColors.plum700.withOpacity(0.12),
+              thumbShape:
+                  const RoundSliderThumbShape(enabledThumbRadius: 10),
+            ),
+            child: Slider(
+              value: severity,
+              min: 1,
+              max: 10,
+              divisions: 9,
+              onChanged: onChanged,
             ),
           ),
-          if (actions.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            const Text(
-              'Suggested actions',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-                letterSpacing: 0.3,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Mild', style: AppTextStyles.caption),
+              Text('Moderate', style: AppTextStyles.caption),
+              Text('Severe', style: AppTextStyles.caption),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── AI Analysis Card ────────────────────────────────────────────────────────
+
+class _AiResult {
+  final String condition;
+  final int pct;
+  final String note;
+  const _AiResult({
+    required this.condition,
+    required this.pct,
+    required this.note,
+  });
+}
+
+class _AiAnalysisCard extends StatelessWidget {
+  final List<_AiResult> results;
+  const _AiAnalysisCard({required this.results});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: cardDecoration(),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Banner
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.plum900, AppColors.plum700],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
               ),
             ),
-            const SizedBox(height: 8),
-            ...actions.map((a) => Padding(
-                  padding: const EdgeInsets.only(bottom: 5),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.only(top: 6, right: 8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          a,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textPrimary,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                    ],
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                )),
-          ],
+                  alignment: Alignment.center,
+                  child: const Text('🧠', style: TextStyle(fontSize: 17)),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI Analysis Results',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'scikit-learn · Random Forest',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Results
+          ...results.asMap().entries.map((e) {
+            final r = e.value;
+            final isLast = e.key == results.length - 1;
+            return _AiResultRow(result: r, isLast: isLast);
+          }),
+
+          // Disclaimer
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: const BoxDecoration(
+              color: AppColors.rose50,
+              border: Border(top: BorderSide(color: AppColors.rose200)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('⚠️', style: TextStyle(fontSize: 13)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Not a medical diagnosis. Consult a healthcare professional.',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.rose600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AiResultRow extends StatelessWidget {
+  final _AiResult result;
+  final bool isLast;
+
+  const _AiResultRow({required this.result, required this.isLast});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : const Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 13, 18, 13),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(result.condition,
+                    style: AppTextStyles.bodySemiBold),
+              ),
+              Text(
+                '${result.pct}%',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.plum600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Container(
+            height: 5,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: result.pct / 100,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.plum200, AppColors.plum600],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(result.note, style: AppTextStyles.caption),
         ],
       ),
     );

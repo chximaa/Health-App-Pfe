@@ -12,20 +12,31 @@ import '../../shared/widgets/main_scaffold.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/login',
+    initialLocation: '/welcome',
     redirect: (context, state) async {
       const storage = FlutterSecureStorage();
       final token = await storage.read(key: 'access_token');
       final isAuth = token != null;
-      final isLoginPage = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register';
 
-      if (!isAuth && !isLoginPage) return '/login';
-      if (isAuth && isLoginPage) return '/dashboard';
+      final publicPaths = ['/login', '/register', '/welcome'];
+      final isPublic = publicPaths.any(
+          (p) => state.matchedLocation.startsWith(p));
+
+      if (!isAuth && !isPublic) return '/welcome';
+      if (isAuth &&
+          (state.matchedLocation == '/login' ||
+              state.matchedLocation == '/register' ||
+              state.matchedLocation == '/welcome')) {
+        return '/dashboard';
+      }
       return null;
     },
     routes: [
-      // Auth
+      // Auth / Onboarding
+      GoRoute(
+        path: '/welcome',
+        builder: (context, state) => const WelcomeScreen(),
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginScreen(),
@@ -33,12 +44,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
-      ),
-
-      // Onboarding
-      GoRoute(
-        path: '/welcome',
-        builder: (context, state) => const WelcomeScreen(),
       ),
       GoRoute(
         path: '/profile-setup',
@@ -48,31 +53,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Main app (bottom nav)
       GoRoute(
         path: '/dashboard',
-        builder: (context, state) =>
-            const MainScaffold(initialIndex: 0),
+        builder: (context, state) => const MainScaffold(initialIndex: 0),
       ),
       GoRoute(
         path: '/symptoms',
-        builder: (context, state) =>
-            const MainScaffold(initialIndex: 1),
+        builder: (context, state) => const MainScaffold(initialIndex: 1),
+      ),
+      GoRoute(
+        path: '/nutrition',
+        builder: (context, state) => const MainScaffold(initialIndex: 2),
       ),
       GoRoute(
         path: '/analytics',
-        builder: (context, state) =>
-            const MainScaffold(initialIndex: 2),
-      ),
-      GoRoute(
-        path: '/medications',
-        builder: (context, state) =>
-            const MainScaffold(initialIndex: 3),
+        builder: (context, state) => const MainScaffold(initialIndex: 3),
       ),
       GoRoute(
         path: '/profile',
-        builder: (context, state) =>
-            const MainScaffold(initialIndex: 4),
+        builder: (context, state) => const MainScaffold(initialIndex: 4),
       ),
 
-      // Detail screens (no bottom nav)
+      // Detail screens
       GoRoute(
         path: '/sleep',
         builder: (context, state) => const SleepScreen(),
@@ -83,17 +83,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
     errorBuilder: (context, state) => Scaffold(
+      backgroundColor: AppColors.background,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text('🔍', style: const TextStyle(fontSize: 48)),
+            const SizedBox(height: 16),
+            Text(
               'Page not found',
-              style: TextStyle(fontSize: 18),
+              style: AppTextStyles.h3,
             ),
-            TextButton(
+            const SizedBox(height: 12),
+            ElevatedButton(
               onPressed: () => context.go('/dashboard'),
-              child: const Text('Go home'),
+              child: const Text('Go Home'),
             ),
           ],
         ),
