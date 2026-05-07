@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_theme.dart';
 import '../../features/analytics/screens/analytics_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
-import '../../features/medications/screens/medications_screen.dart';
+import '../../features/nutrition/screens/nutrition_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/symptoms/screens/symptoms_screen.dart';
 
 class MainScaffold extends StatefulWidget {
   final int initialIndex;
-
   const MainScaffold({super.key, this.initialIndex = 0});
 
   @override
@@ -22,17 +22,17 @@ class _MainScaffoldState extends State<MainScaffold> {
   final List<Widget> _pages = const [
     DashboardScreen(),
     SymptomsScreen(),
+    NutritionScreen(),
     AnalyticsScreen(),
-    MedicationsScreen(),
     ProfileScreen(),
   ];
 
-  final List<_NavItem> _navItems = const [
-    _NavItem(icon: Icons.home_rounded, label: 'Home'),
-    _NavItem(icon: Icons.health_and_safety_rounded, label: 'Symptoms'),
-    _NavItem(icon: Icons.bar_chart_rounded, label: 'Analytics'),
-    _NavItem(icon: Icons.medication_rounded, label: 'Meds'),
-    _NavItem(icon: Icons.person_rounded, label: 'Profile'),
+  static const List<_NavItem> _navItems = [
+    _NavItem(emoji: '🏠', label: 'Home'),
+    _NavItem(emoji: '🩺', label: 'Symptoms'),
+    _NavItem(emoji: '🥗', label: 'Nutrition'),
+    _NavItem(emoji: '📊', label: 'Reports'),
+    _NavItem(emoji: '⚙️', label: 'Settings'),
   ];
 
   @override
@@ -66,10 +66,12 @@ class _MainScaffoldState extends State<MainScaffold> {
 }
 
 class _NavItem {
-  final IconData icon;
+  final String emoji;
   final String label;
-  const _NavItem({required this.icon, required this.label});
+  const _NavItem({required this.emoji, required this.label});
 }
+
+// ─── Floating Plum Pill Navbar ───────────────────────────────────────────────
 
 class _FloatingPillNav extends StatelessWidget {
   final int selectedIndex;
@@ -85,30 +87,34 @@ class _FloatingPillNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
       child: Container(
         height: 68,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(34),
+          color: AppColors.plum900,
+          borderRadius: BorderRadius.circular(999),
           boxShadow: [
             BoxShadow(
-              color: AppColors.textPrimary.withOpacity(0.10),
-              blurRadius: 28,
-              offset: const Offset(0, 10),
+              color: AppColors.plum900.withOpacity(0.35),
+              blurRadius: 32,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: List.generate(items.length, (i) {
-            final isSelected = selectedIndex == i;
-            return _NavButton(
-              item: items[i],
-              isSelected: isSelected,
-              onTap: () => onTap(i),
-            );
-          }),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Row(
+            children: List.generate(items.length, (i) {
+              final isSelected = selectedIndex == i;
+              return Expanded(
+                child: _NavButton(
+                  item: items[i],
+                  isSelected: isSelected,
+                  onTap: () => onTap(i),
+                ),
+              );
+            }),
+          ),
         ),
       ),
     );
@@ -132,29 +138,51 @@ class _NavButton extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 280),
+        duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutCubic,
-        width: 50,
-        height: 50,
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.transparent,
-          shape: BoxShape.circle,
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.4),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : null,
+          color: isSelected
+              ? Colors.white.withOpacity(0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
         ),
-        child: Icon(
-          item.icon,
-          size: 22,
-          color: isSelected ? Colors.white : AppColors.textHint,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              item.emoji,
+              style: TextStyle(
+                fontSize: isSelected ? 18 : 16,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              item.label,
+              style: TextStyle(
+                fontSize: 8,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.40),
+                letterSpacing: 0.2,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(height: 3),
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: AppColors.sage400,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
-    );
+    )
+        .animate(target: isSelected ? 1 : 0)
+        .scaleXY(begin: 0.95, end: 1.0, duration: 200.ms);
   }
 }

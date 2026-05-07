@@ -1,5 +1,5 @@
 name: health_app
-description: AI-powered health tracking application
+description: SensiaHealth — Smart student health companion
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -16,11 +16,13 @@ dependencies:
   # Navigation
   go_router: ^13.2.0
 
+  # Fonts
+  google_fonts: ^6.2.1
+
   # Charts
   fl_chart: ^0.66.2
 
   # Animations
-  lottie: ^3.1.0
   flutter_animate: ^4.5.0
 
   # HTTP & Storage
@@ -30,7 +32,6 @@ dependencies:
 
   # UI Components
   percent_indicator: ^4.2.3
-  cached_network_image: ^3.3.1
 
   # Utils
   intl: ^0.19.0

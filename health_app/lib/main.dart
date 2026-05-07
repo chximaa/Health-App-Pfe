@@ -9,9 +9,9 @@ void main() {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      systemNavigationBarColor: AppColors.background,
-      systemNavigationBarIconBrightness: Brightness.dark,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: AppColors.plum900,
+      systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
   SystemChrome.setPreferredOrientations([
@@ -20,13 +20,13 @@ void main() {
   ]);
   runApp(
     const ProviderScope(
-      child: HealthApp(),
+      child: SensiaHealthApp(),
     ),
   );
 }
 
-class HealthApp extends ConsumerWidget {
-  const HealthApp({super.key});
+class SensiaHealthApp extends ConsumerWidget {
+  const SensiaHealthApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
