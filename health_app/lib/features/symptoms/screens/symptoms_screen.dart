@@ -13,7 +13,6 @@ class SymptomsScreen extends ConsumerStatefulWidget {
 
 class _SymptomsScreenState extends ConsumerState<SymptomsScreen> {
   final Set<String> _selected = {'🌡️ Fever', '🤕 Headache', '😴 Fatigue'};
-  double _severity = 6;
   bool _analyzed = true;
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
@@ -208,15 +207,6 @@ class _SymptomsScreenState extends ConsumerState<SymptomsScreen> {
                       }).toList(),
                     ),
                   ).animate().fadeIn(duration: 300.ms),
-
-                  // Severity card
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: _SeverityCard(
-                      severity: _severity,
-                      onChanged: (v) => setState(() => _severity = v),
-                    ),
-                  ).animate().fadeIn(delay: 80.ms, duration: 300.ms),
 
                   // Analyze button
                   Padding(

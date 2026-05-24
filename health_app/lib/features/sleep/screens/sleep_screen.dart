@@ -37,14 +37,20 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
 
   Future<void> _save() async {
     setState(() => _isSaving = true);
+    // ── FIX: Correct date construction for bedtime / wake time ─────────────
+    // Bedtime (e.g. 23:00) is typically the previous calendar day relative
+    // to wake time (e.g. 07:00 the next morning).
+    // We compute sleepStart as today-at-bedtime, then check:
+    //   • if wakeTime > bedTime → they're on the SAME calendar day (e.g. nap)
+    //   • if wakeTime ≤ bedTime → sleep crosses midnight, so sleepStart was yesterday
     final now = DateTime.now();
-    final sleepStart = DateTime(
-      now.year,
-      now.month,
-      now.day - 1,
-      _bedtime.hour,
-      _bedtime.minute,
-    );
+    final bedMinutes = _bedtime.hour * 60 + _bedtime.minute;
+    final wakeMinutes = _wakeTime.hour * 60 + _wakeTime.minute;
+    final crossesMidnight = wakeMinutes <= bedMinutes;
+
+    final sleepStart = crossesMidnight
+        ? DateTime(now.year, now.month, now.day - 1, _bedtime.hour, _bedtime.minute)
+        : DateTime(now.year, now.month, now.day, _bedtime.hour, _bedtime.minute);
     final sleepEnd = DateTime(
       now.year,
       now.month,
@@ -79,10 +85,19 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Sleep Tracker'),
+        // Back button is auto-provided by Navigator when pushed on the stack.
+        // When accessed as a tab, there is no back button (correct behavior).
         actions: [
           IconButton(
-            icon: Icon(_showForm ? Icons.close : Icons.add_rounded),
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: Icon(
+                _showForm ? Icons.close_rounded : Icons.add_rounded,
+                key: ValueKey(_showForm),
+              ),
+            ),
             onPressed: () => setState(() => _showForm = !_showForm),
+            tooltip: _showForm ? 'Cancel' : 'Log sleep',
           ),
         ],
       ),
@@ -90,17 +105,27 @@ class _SleepScreenState extends ConsumerState<SleepScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Sleep clock dial
-            _SleepClockCard(
-              hours: state.lastNightHours,
-              quality: state.lastNightQuality,
-              bedtime: _bedtime,
-              wakeTime: _wakeTime,
+            // ── Sleep clock dial (hides when the log form is open) ───────
+            AnimatedSize(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeInOutCubic,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 250),
+                opacity: _showForm ? 0.0 : 1.0,
+                child: _showForm
+                    ? const SizedBox.shrink()
+                    : _SleepClockCard(
+                        hours: state.lastNightHours,
+                        quality: state.lastNightQuality,
+                        bedtime: _bedtime,
+                        wakeTime: _wakeTime,
+                      ),
+              ),
             ),
 
-            const SizedBox(height: 24),
+            if (!_showForm) const SizedBox(height: 20),
 
-            // Log form
+            // ── Log form ────────────────────────────────────────────────
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 300),
               crossFadeState: _showForm
@@ -311,39 +336,42 @@ class _SleepClockCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // dial
-          AspectRatio(
-            aspectRatio: 1,
-            child: CustomPaint(
-              painter: _SleepDialPainter(
-                bedtime: bedtime,
-                wakeTime: wakeTime,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.nights_stay_rounded,
-                        color: AppColors.primaryDark, size: 22),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${hours.toStringAsFixed(1)}h',
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -1,
+          // ── Compact dial — fixed 200×200, centred ─────────────────
+          Center(
+            child: SizedBox(
+              width: 200,
+              height: 200,
+              child: CustomPaint(
+                painter: _SleepDialPainter(
+                  bedtime: bedtime,
+                  wakeTime: wakeTime,
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.nights_stay_rounded,
+                          color: AppColors.primaryDark, size: 20),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${hours.toStringAsFixed(1)}h',
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -1,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Last night',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textHint,
-                        fontWeight: FontWeight.w600,
+                      Text(
+                        'Last night',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textHint,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -169,9 +169,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         prefixIconConstraints:
                             const BoxConstraints(minWidth: 0, minHeight: 0),
                       ),
-                      validator: (v) => (v == null || v.isEmpty)
-                          ? 'Email required'
-                          : null,
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Email required' : null,
                     ).animate().fadeIn(delay: 140.ms),
 
                     const SizedBox(height: 14),
@@ -209,10 +208,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                     const SizedBox(height: 8),
 
+                    // ── FIXED: Forgot Password now navigates to /forgot-password ──
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {},
+                        onPressed: () => context.push('/forgot-password'),
                         child: Text(
                           'Forgot password?',
                           style: GoogleFonts.plusJakartaSans(
@@ -255,7 +255,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       children: [
                         const Expanded(child: Divider()),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 12),
                           child: Text('or continue with',
                               style: AppTextStyles.caption),
                         ),
@@ -265,7 +266,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                     const SizedBox(height: 14),
 
-                    // Google button
+                    // Google button (placeholder)
                     GestureDetector(
                       onTap: () {},
                       child: Container(
@@ -273,8 +274,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 13),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(999),
-                          border:
-                              Border.all(color: AppColors.border, width: 1.5),
+                          border: Border.all(
+                              color: AppColors.border, width: 1.5),
                           color: AppColors.card,
                         ),
                         child: Row(
@@ -391,10 +392,7 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: Text(
-        label,
-        style: AppTextStyles.label,
-      ),
+      child: Text(label, style: AppTextStyles.label),
     );
   }
 }
@@ -408,9 +406,7 @@ class _SensiaLogo extends StatelessWidget {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: _LogoPainter(),
-      ),
+      child: CustomPaint(painter: _LogoPainter()),
     );
   }
 }

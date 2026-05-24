@@ -75,9 +75,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             ),
 
             SafeArea(
-              child: Column(
-                children: [
-                  const Spacer(),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // On small windows the rigid Spacer() causes overflow and
+                  // pushes the CTA buttons off-screen, making them unreachable.
+                  // LayoutBuilder detects the available height and switches to
+                  // a scrollable layout when the screen is too short.
+                  final isShort = constraints.maxHeight < 620;
+                  Widget body = Column(
+                    children: [
+                      if (!isShort) const Spacer(),
+                      if (isShort) const SizedBox(height: 16),
 
                   // Logo glass card
                   Container(
@@ -238,7 +246,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   ),
 
                   const SizedBox(height: 24),
-                ],
+                    ],
+                  );
+                  return isShort
+                      ? SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: body,
+                        )
+                      : body;
+                },
               ),
             ),
           ],

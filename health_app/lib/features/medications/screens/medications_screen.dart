@@ -29,6 +29,12 @@ class _MedicationsScreenState extends ConsumerState<MedicationsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Medications'),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                onPressed: () => context.pop(),
+              )
+            : null,
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),

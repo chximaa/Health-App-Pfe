@@ -121,6 +121,14 @@ class AppTextStyles {
         color: AppColors.plum900,
       );
 
+  // FIX: added missing sectionTitle used in dashboard quick-actions grid
+  static TextStyle get sectionTitle => GoogleFonts.plusJakartaSans(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: AppColors.neutral700,
+        letterSpacing: 0.1,
+      );
+
   static TextStyle get body => GoogleFonts.plusJakartaSans(
         fontSize: 13,
         fontWeight: FontWeight.w400,

@@ -59,40 +59,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _finish() async {
-  setState(() {
-    _loading = true;
-    _error = null;
-  });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
 
-  try {
-    await ref.read(authProvider.notifier).register(
+    // register() catches all exceptions internally and returns false on failure.
+    // We MUST check the return value — it never throws, so a try/catch alone
+    // won't catch network or validation failures.
+    final success = await ref.read(authProvider.notifier).register(
           _emailCtrl.text.trim(),
           _passCtrl.text,
           _nameCtrl.text.trim().isEmpty ? 'New User' : _nameCtrl.text.trim(),
         );
 
     if (!mounted) return;
-    
-    // Just navigate - let the dashboard handle auth checks
-    context.go('/dashboard');
-    
-  } catch (e, st) {
-    print("Register error: $e");
-    print(st);
 
-    if (!mounted) return;
-
-    setState(() {
-      _error = e.toString().replaceAll('Exception: ', '');
-    });
-  } finally {
-    if (mounted) {
+    if (!success) {
+      // Pull the error message out of authProvider's AuthError state.
+      final authState = ref.read(authProvider);
       setState(() {
+        _error = authState is AuthError
+            ? authState.message
+            : 'Registration failed. Please try again.';
         _loading = false;
       });
+      return; // stay on the register screen; do NOT navigate
     }
+
+    // Only reach here when registration truly succeeded.
+    context.go('/dashboard');
   }
-}
 
   @override
   Widget build(BuildContext context) {

@@ -42,6 +42,30 @@ class AuthService {
     return tokenResponse;
   }
 
+  /// Step 1 of the forgot-password flow: asks the backend to e-mail a reset code.
+  Future<void> forgotPassword(String email) async {
+    await _client.post(
+      '/auth/forgot-password',
+      data: {'email': email},
+    );
+  }
+
+  /// Step 2: submits the reset code and the new password.
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _client.post(
+      '/auth/reset-password',
+      data: {
+        'email': email,
+        'code': code,
+        'new_password': newPassword,
+      },
+    );
+  }
+
   Future<void> logout() async {
     await _storage.deleteAll();
   }

@@ -1,138 +1,301 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/constants/app_constants.dart';
-import '../../auth/providers/auth_provider.dart';
-import '../../water/providers/water_provider.dart';
-import '../../sleep/providers/sleep_provider.dart';
 
-class DashboardScreen extends ConsumerStatefulWidget {
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../medications/providers/medication_provider.dart';
+import '../../sleep/providers/sleep_provider.dart';
+import '../../water/providers/water_provider.dart';
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(profileProvider);
+    final sleepState  = ref.watch(sleepProvider);
+    final waterState  = ref.watch(waterProvider);
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() {
-      ref.read(waterProvider.notifier).loadToday();
-      ref.read(sleepProvider.notifier).loadRecent();
-      ref.read(profileProvider.notifier).loadProfile();
-    });
-  }
+    final profile    = profileAsync.valueOrNull;
+    final nameParts  = (profile?.fullName ?? '').trim().split(' ');
+    final firstName  = nameParts.isNotEmpty ? nameParts.first : '';
+    final lastName   = nameParts.length > 1 ? nameParts.last : '';
 
-  String get _greeting {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good morning ·';
-    if (h < 17) return 'Good afternoon ·';
-    return 'Good evening ·';
-  }
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12 ? 'Good morning,'
+        : hour < 17 ? 'Good afternoon,'
+        : 'Good evening,';
 
-  @override
-  Widget build(BuildContext context) {
-    final profile = ref.watch(profileProvider).valueOrNull;
-    final waterState = ref.watch(waterProvider);
-    final sleepState = ref.watch(sleepProvider);
-
-    final firstName = (profile?.fullName ?? '').split(' ').first;
-    final lastName = (profile?.fullName ?? '').split(' ').skip(1).join(' ');
-
-    final waterPct =
-        (waterState.totalMl / AppConstants.dailyWaterGoalMl).clamp(0.0, 1.0);
-    final sleepPct =
-        (sleepState.lastNightHours / AppConstants.recommendedSleepHours)
-            .clamp(0.0, 1.0);
-    final healthScore = ((waterPct * 0.4 + sleepPct * 0.4 + 0.66 * 0.2) * 100)
-        .round()
-        .clamp(0, 100);
+    final sleepGoal = 8.0;
+    final sleepPct  = (sleepState.lastNightHours / sleepGoal).clamp(0.0, 1.0);
+    final waterPct  = (waterState.totalMl / AppConstants.dailyWaterGoalMl).clamp(0.0, 1.0);
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
+      body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
+        slivers: [
+          // ── Gradient header ────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: _GradientHeader(
+              greeting: greeting,
+              firstName: firstName,
+              lastName: lastName,
+              sleepPct: sleepPct,
+              waterPct: waterPct,
+              sleepHours: sleepState.lastNightHours,
+              waterMl: waterState.totalMl,
+            ),
+          ),
+
+          // ── Body cards ─────────────────────────────────────────────────
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+
+                // AI Health Insights
+                _AiInsightsCard(
+                  waterMl: waterState.totalMl,
+                  sleepHours: sleepState.lastNightHours,
+                  sleepPct: sleepPct,
+                  waterPct: waterPct,
+                ).animate().fadeIn(delay: 80.ms, duration: 400.ms)
+                    .slideY(begin: 0.06, end: 0),
+
+                const SizedBox(height: 14),
+
+                // Sleep & Water ring cards
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RingCard(
+                        label: 'Sleep',
+                        emoji: '🌙',
+                        pct: sleepPct,
+                        value: sleepState.lastNightHours == 0
+                            ? '—'
+                            : '${sleepState.lastNightHours.toStringAsFixed(1)}h',
+                        sub: 'Goal: ${sleepGoal.toStringAsFixed(0)}h',
+                        ringColor: AppColors.sage500,
+                        bgColor: AppColors.sage100,
+                        onTap: () => context.push('/sleep'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _RingCard(
+                        label: 'Hydration',
+                        emoji: '💧',
+                        pct: waterPct,
+                        value: '${(waterState.totalMl / 1000).toStringAsFixed(1)}L',
+                        sub: 'Goal: ${(AppConstants.dailyWaterGoalMl / 1000).toStringAsFixed(1)}L',
+                        ringColor: const Color(0xFF42A5F5),
+                        bgColor: const Color(0xFFE3F2FD),
+                        onTap: () {},
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(delay: 160.ms, duration: 400.ms)
+                    .slideY(begin: 0.06, end: 0),
+
+                const SizedBox(height: 14),
+
+                // Medications
+                _DynamicMedicationsCard()
+                    .animate().fadeIn(delay: 240.ms, duration: 400.ms)
+                    .slideY(begin: 0.06, end: 0),
+
+                const SizedBox(height: 14),
+
+                // Quick actions
+                _QuickActionsRow()
+                    .animate().fadeIn(delay: 320.ms, duration: 400.ms)
+                    .slideY(begin: 0.06, end: 0),
+
+                const SizedBox(height: 14),
+
+                // Tip banner
+                const _TipBanner()
+                    .animate().fadeIn(delay: 400.ms, duration: 400.ms),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Gradient Header ──────────────────────────────────────────────────────────
+
+class _GradientHeader extends StatelessWidget {
+  final String greeting;
+  final String firstName;
+  final String lastName;
+  final double sleepPct;
+  final double waterPct;
+  final double sleepHours;
+  final int waterMl;
+
+  const _GradientHeader({
+    required this.greeting,
+    required this.firstName,
+    required this.lastName,
+    required this.sleepPct,
+    required this.waterPct,
+    required this.sleepHours,
+    required this.waterMl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, top + 16, 20, 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.plum900, AppColors.plum700],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Greeting row (no bell — moved to Notifications screen)
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(greeting,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.55),
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    RichText(
+                      text: TextSpan(children: [
+                        TextSpan(
+                          text: firstName,
+                          style: GoogleFonts.playfairDisplay(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.3),
+                        ),
+                        if (lastName.isNotEmpty)
+                          TextSpan(
+                            text: ' $lastName',
+                            style: GoogleFonts.playfairDisplay(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                fontStyle: FontStyle.italic,
+                                letterSpacing: -0.3),
+                          ),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Stats row
+          Row(
+            children: [
+              _HeaderStat(
+                emoji: '🌙',
+                label: 'Sleep',
+                value: sleepHours == 0
+                    ? 'Not logged'
+                    : '${sleepHours.toStringAsFixed(1)}h',
+                pct: sleepPct,
+                barColor: AppColors.sage400,
+              ),
+              const SizedBox(width: 10),
+              _HeaderStat(
+                emoji: '💧',
+                label: 'Water',
+                value: '${(waterMl / 1000).toStringAsFixed(1)} L',
+                pct: waterPct,
+                barColor: const Color(0xFF64B5F6),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderStat extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final String value;
+  final double pct;
+  final Color barColor;
+
+  const _HeaderStat({
+    required this.emoji,
+    required this.label,
+    required this.value,
+    required this.pct,
+    required this.barColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.12)),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Gradient header ──────────────────────────────────────────
-            _GradientHeader(
-              greeting: _greeting,
-              firstName: firstName.isEmpty ? 'there' : firstName,
-              lastName: lastName,
-              healthScore: healthScore,
-              waterMl: waterState.totalMl,
-              waterPct: waterPct,
-              sleepHours: sleepState.lastNightHours,
-              sleepPct: sleepPct,
-            ).animate().fadeIn(duration: 400.ms),
-
-            const SizedBox(height: 14),
-
-            // ── Mood & BMI row ────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _MiniCard(
-                      label: 'Mood Today',
-                      iconBg: AppColors.rose100,
-                      icon: '😊',
-                      content: _MoodSelector(),
-                      sub: 'Good · Logged 10m ago',
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MiniCard( 
-                      label: 'BMI',
-                      sub: 'Normal',
-                      iconBg: AppColors.sage100,
-                      icon: '⚖️',
-                      content: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('22.5',
-                              style: AppTextStyles.num
-                                  .copyWith(color: AppColors.sage700)),
-                          const SizedBox(height: 2),
-                          Text('Normal range',
-                              style: AppTextStyles.caption),
-                          const SizedBox(height: 8),
-                          _ProgressBar(
-                              value: 0.55, color: AppColors.sage500),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+            Row(children: [
+              Text(emoji, style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 6),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withOpacity(0.6),
+                      fontWeight: FontWeight.w500)),
+            ]),
+            const SizedBox(height: 4),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 4,
+                backgroundColor: Colors.white.withOpacity(0.15),
+                valueColor: AlwaysStoppedAnimation(barColor),
               ),
-            ).animate().fadeIn(delay: 100.ms, duration: 400.ms).slideY(
-                begin: 0.06, end: 0),
-
-            const SizedBox(height: 12),
-
-            // ── Medications card ──────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _MedicationsCard(),
-            ).animate().fadeIn(delay: 160.ms, duration: 400.ms),
-
-            const SizedBox(height: 12),
-
-            // ── Today's tip ───────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: const _TipBanner(),
-            ).animate().fadeIn(delay: 220.ms, duration: 400.ms),
-
-            // Spacing for floating nav
-            const SizedBox(height: 100),
+            ),
           ],
         ),
       ),
@@ -140,343 +303,243 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-// ─── Gradient Header ─────────────────────────────────────────────────────────
+// ─── AI Health Insights Card ──────────────────────────────────────────────────
 
-class _GradientHeader extends StatelessWidget {
-  final String greeting;
-  final String firstName;
-  final String lastName;
-  final int healthScore;
+class _Insight {
+  final String emoji;
+  final String title;
+  final String body;
+  final Color color;
+  final Color borderColor;
+
+  const _Insight({
+    required this.emoji,
+    required this.title,
+    required this.body,
+    required this.color,
+    required this.borderColor,
+  });
+}
+
+class _AiInsightsCard extends StatelessWidget {
   final int waterMl;
-  final double waterPct;
   final double sleepHours;
   final double sleepPct;
+  final double waterPct;
 
-  const _GradientHeader({
-    required this.greeting,
-    required this.firstName,
-    required this.lastName,
-    required this.healthScore,
+  const _AiInsightsCard({
     required this.waterMl,
-    required this.waterPct,
     required this.sleepHours,
     required this.sleepPct,
+    required this.waterPct,
   });
+
+  List<_Insight> _buildInsights() {
+    final insights = <_Insight>[];
+
+    // Sleep insight
+    if (sleepHours == 0) {
+      insights.add(const _Insight(
+        emoji: '🌙',
+        title: 'No sleep logged yet',
+        body: 'Log tonight\'s sleep to get personalised rest insights.',
+        color: AppColors.plum50,
+        borderColor: AppColors.plum200,
+      ));
+    } else if (sleepHours < 6) {
+      insights.add(_Insight(
+        emoji: '⚠️',
+        title: 'You\'re sleep-deprived',
+        body: 'Only ${sleepHours.toStringAsFixed(1)}h recorded. Aim for 7–9 h. Try a screen-free 30-min wind-down.',
+        color: AppColors.rose50,
+        borderColor: AppColors.rose200,
+      ));
+    } else if (sleepHours < 7) {
+      insights.add(_Insight(
+        emoji: '😴',
+        title: 'Slightly under target',
+        body: '${sleepHours.toStringAsFixed(1)}h is close but a bit short. Try going to bed 30 min earlier tonight.',
+        color: AppColors.plum50,
+        borderColor: AppColors.plum200,
+      ));
+    } else {
+      insights.add(_Insight(
+        emoji: '✅',
+        title: 'Great sleep last night!',
+        body: '${sleepHours.toStringAsFixed(1)}h is within the healthy range. Keep the same schedule for consistency.',
+        color: AppColors.sage50,
+        borderColor: AppColors.sage200,
+      ));
+    }
+
+    // Hydration insight
+    if (waterMl == 0) {
+      insights.add(const _Insight(
+        emoji: '💧',
+        title: 'Start hydrating now',
+        body: 'You haven\'t logged any water today. Drink a glass to begin!',
+        color: Color(0xFFE3F2FD),
+        borderColor: Color(0xFF90CAF9),
+      ));
+    } else if (waterPct < 0.5) {
+      insights.add(_Insight(
+        emoji: '💦',
+        title: 'Hydration below 50%',
+        body: '${(waterMl / 1000).toStringAsFixed(2)} L consumed. Drink 2–3 more glasses to stay on track.',
+        color: const Color(0xFFE3F2FD),
+        borderColor: const Color(0xFF90CAF9),
+      ));
+    } else if (waterPct < 1.0) {
+      insights.add(_Insight(
+        emoji: '🥤',
+        title: 'Almost at your water goal!',
+        body: '${(waterMl / 1000).toStringAsFixed(2)} L done. Keep going — you\'re nearly there!',
+        color: const Color(0xFFE3F2FD),
+        borderColor: const Color(0xFF90CAF9),
+      ));
+    } else {
+      insights.add(_Insight(
+        emoji: '🏆',
+        title: 'Hydration goal reached!',
+        body: 'You\'ve hit your ${(AppConstants.dailyWaterGoalMl / 1000).toStringAsFixed(1)} L goal today. Excellent work!',
+        color: AppColors.sage50,
+        borderColor: AppColors.sage200,
+      ));
+    }
+
+    return insights.take(2).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final insights = _buildInsights();
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.plum900, AppColors.plum700],
-        ),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(36),
-          bottomRight: Radius.circular(36),
-        ),
-      ),
-      child: Stack(
+      decoration: cardDecoration(),
+      child: Column(
         children: [
-          // Decorative orb
-          Positioned(
-            top: -60,
-            right: -50,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.04),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                    color: AppColors.plum100,
+                    borderRadius: BorderRadius.circular(10)),
+                alignment: Alignment.center,
+                child: const Text('🤖', style: TextStyle(fontSize: 15)),
               ),
-            ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Status bar row
-                  Row(
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
+                      Text('AI Health Insights', style: AppTextStyles.cardTitle),
+                      Text('Personalised to your data today',
+                          style: AppTextStyles.caption),
+                    ]),
+              ),
+            ]),
+          ),
+          const Divider(height: 1),
+          ...insights.map((ins) => Container(
+                margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ins.color,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: ins.borderColor),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ins.emoji, style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(greeting,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withOpacity(0.48),
-                                  fontWeight: FontWeight.w500,
-                                )),
+                            Text(ins.title, style: AppTextStyles.bodySemiBold),
                             const SizedBox(height: 2),
-                            RichText(
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: firstName,
-                                    style: GoogleFonts.playfairDisplay(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
-                                  if (lastName.isNotEmpty)
-                                    TextSpan(
-                                      text: ' $lastName',
-                                      style: GoogleFonts.playfairDisplay(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.white,
-                                        fontStyle: FontStyle.italic,
-                                        letterSpacing: -0.3,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Notification bell
-                      Stack(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Text('🔔', style: TextStyle(fontSize: 18)),
-                          ),
-                          Positioned(
-                            top: 7,
-                            right: 7,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: AppColors.rose500,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: AppColors.plum900, width: 1.5),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Score glass card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.14), width: 1),
+                            Text(ins.body,
+                                style: AppTextStyles.caption
+                                    .copyWith(color: AppColors.neutral600)),
+                          ]),
                     ),
-                    child: Row(
-                      children: [
-                        // Ring
-                        SizedBox(
-                          width: 64,
-                          height: 64,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              CustomPaint(
-                                size: const Size(64, 64),
-                                painter: _RingPainter(
-                                  progress: healthScore / 100,
-                                  trackColor: Colors.white.withOpacity(0.12),
-                                  fillColor: AppColors.sage300,
-                                ),
-                              ),
-                              Text(
-                                '$healthScore%',
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                healthScore >= 80
-                                    ? 'Looking Good! 🌿'
-                                    : healthScore >= 60
-                                        ? 'On Track 💪'
-                                        : 'Needs Attention ⚠️',
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '2 glasses behind your daily hydration goal.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.white.withOpacity(0.55),
-                                  height: 1.4,
-                                ),
-                                maxLines: 2,
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.sage300.withOpacity(0.22),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                                color: AppColors.sage300.withOpacity(0.3)),
-                          ),
-                          child: Text(
-                            '+3%',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.sage200,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // Metrics row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _MetricChip(
-                          emoji: '💧',
-                          value: '${(waterMl / 1000).toStringAsFixed(2)}L',
-                          label: 'Water',
-                          progress: waterPct,
-                          color: AppColors.sage400,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _MetricChip(
-                          emoji: '🌙',
-                          value: '${sleepHours.toStringAsFixed(1)}h',
-                          label: 'Sleep',
-                          progress: sleepPct,
-                          color: AppColors.plum400,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _MetricChip(
-                          emoji: '👟',
-                          value: '6.4k',
-                          label: 'Steps',
-                          progress: 0.64,
-                          color: AppColors.sage300,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+                  ],
+                ),
+              )),
+          const SizedBox(height: 14),
         ],
       ),
     );
   }
 }
 
-class _MetricChip extends StatelessWidget {
-  final String emoji;
-  final String value;
-  final String label;
-  final double progress;
-  final Color color;
+// ─── Ring Card ────────────────────────────────────────────────────────────────
 
-  const _MetricChip({
-    required this.emoji,
-    required this.value,
+class _RingCard extends StatelessWidget {
+  final String label;
+  final String emoji;
+  final double pct;
+  final String value;
+  final String sub;
+  final Color ringColor;
+  final Color bgColor;
+  final VoidCallback onTap;
+
+  const _RingCard({
     required this.label,
-    required this.progress,
-    required this.color,
+    required this.emoji,
+    required this.pct,
+    required this.value,
+    required this.sub,
+    required this.ringColor,
+    required this.bgColor,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
-      ),
-      child: Column(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 18)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: GoogleFonts.playfairDisplay(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              color: Colors.white.withOpacity(0.45),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            height: 3,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: progress.clamp(0.0, 1.0),
-                child: Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: cardDecoration(),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(label, style: AppTextStyles.caption),
+                Container(
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                      color: bgColor,
+                      borderRadius: BorderRadius.circular(9)),
+                  alignment: Alignment.center,
+                  child: Text(emoji, style: const TextStyle(fontSize: 13)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 70,
+              height: 70,
+              child: CustomPaint(
+                painter: _RingPainter(pct: pct, color: ringColor),
+                child: Center(
+                  child: Text(value,
+                      style: AppTextStyles.num
+                          .copyWith(fontSize: 14, color: AppColors.plum900)),
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(sub, style: AppTextStyles.caption),
+          ],
+        ),
       ),
     );
   }
@@ -485,195 +548,117 @@ class _MetricChip extends StatelessWidget {
 // ─── Ring Painter ─────────────────────────────────────────────────────────────
 
 class _RingPainter extends CustomPainter {
-  final double progress;
-  final Color trackColor;
-  final Color fillColor;
+  final double pct;
+  final Color color;
 
-  const _RingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.fillColor,
-  });
+  _RingPainter({required this.pct, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = (size.shortestSide - 10) / 2;
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = math.min(cx, cy) - 6;
+    final rect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
 
-    canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..color = trackColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 5);
-
+    // Track
     canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      -math.pi / 2,
-      progress.clamp(0, 1) * 2 * math.pi,
-      false,
-      Paint()
-        ..color = fillColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round,
-    );
+        rect,
+        -math.pi / 2,
+        2 * math.pi,
+        false,
+        Paint()
+          ..color = AppColors.border
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 7
+          ..strokeCap = StrokeCap.round);
+
+    // Progress
+    if (pct > 0) {
+      canvas.drawArc(
+          rect,
+          -math.pi / 2,
+          2 * math.pi * pct,
+          false,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 7
+            ..strokeCap = StrokeCap.round);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _RingPainter old) =>
-      old.progress != progress;
+  bool shouldRepaint(_RingPainter old) =>
+      old.pct != pct || old.color != color;
 }
 
-// ─── Mini Card ───────────────────────────────────────────────────────────────
+// ─── Dynamic Medications Card ─────────────────────────────────────────────────
 
-class _MiniCard extends StatelessWidget {
-  final String label;
-  final Color iconBg;
-  final String icon;
-  final Widget content;
-  final String sub;
-
-  const _MiniCard({
-    required this.label,
-    required this.iconBg,
-    required this.icon,
-    required this.content,
-    required this.sub,
-  });
-
+class _DynamicMedicationsCard extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: AppTextStyles.caption),
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                alignment: Alignment.center,
-                child: Text(icon, style: const TextStyle(fontSize: 14)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          content,
-          const SizedBox(height: 4),
-          Text(sub, style: AppTextStyles.caption),
-        ],
-      ),
-    );
-  }
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(medicationProvider);
 
-// ─── Mood Selector ────────────────────────────────────────────────────────────
-
-class _MoodSelector extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    const moods = ['😢', '😐', '😊', '😄'];
-    return Row(
-      children: moods.map((m) {
-        final isSelected = m == '😊';
-        return Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: Text(
-            m,
-            style: TextStyle(
-              fontSize: isSelected ? 18 : 14,
-              color: isSelected ? null : null,
-            ).copyWith(
-              color: isSelected ? null : const Color(0x66000000),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-// ─── Progress Bar ────────────────────────────────────────────────────────────
-
-class _ProgressBar extends StatelessWidget {
-  final double value;
-  final Color color;
-
-  const _ProgressBar({required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 4,
-      decoration: BoxDecoration(
-        color: AppColors.border,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: FractionallySizedBox(
-          widthFactor: value.clamp(0.0, 1.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(999),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Medications Card ────────────────────────────────────────────────────────
-
-class _MedicationsCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
     return Container(
       decoration: cardDecoration(),
       child: Column(
         children: [
-          // Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('💊 Medication Today', style: AppTextStyles.cardTitle),
-                Text('See all',
-                    style: AppTextStyles.label
-                        .copyWith(color: AppColors.sage600)),
+                Row(children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                        color: AppColors.rose100,
+                        borderRadius: BorderRadius.circular(10)),
+                    alignment: Alignment.center,
+                    child: const Text('💊', style: TextStyle(fontSize: 14)),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('Medications', style: AppTextStyles.cardTitle),
+                ]),
+                TextButton(
+                  onPressed: () => context.push('/medications'),
+                  child: const Text('See all'),
+                ),
               ],
             ),
           ),
           const Divider(height: 1),
-          _MedItem(
-            emoji: '💊',
-            bg: AppColors.sage100,
-            name: 'Vitamin D — 1000 IU',
-            time: '⏰ 8:00 AM · Daily',
-            taken: true,
-          ),
-          const Divider(height: 1),
-          _MedItem(
-            emoji: '💉',
-            bg: AppColors.rose100,
-            name: 'Ventolin — 100mcg',
-            time: '⏰ 1:00 PM · As needed',
-            taken: false,
-          ),
+          if (state.isLoading)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(),
+            )
+          else if (state.medications.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(children: [
+                const Text('💊', style: TextStyle(fontSize: 32)),
+                const SizedBox(height: 8),
+                Text('No medications tracked yet',
+                    style: AppTextStyles.bodySemiBold),
+                const SizedBox(height: 4),
+                Text('Add your medications to get reminders',
+                    style: AppTextStyles.caption),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () => context.push('/medications'),
+                  child: const Text('Track Medications'),
+                ),
+              ]),
+            )
+          else
+            ...state.medications.take(3).map((med) => _MedItem(
+                  name: med.name,
+                  dose: med.dosage ?? '',
+                  time: med.frequency ?? '',
+                )),
+          const SizedBox(height: 4),
         ],
       ),
     );
@@ -681,35 +666,26 @@ class _MedicationsCard extends StatelessWidget {
 }
 
 class _MedItem extends StatelessWidget {
-  final String emoji;
-  final Color bg;
   final String name;
+  final String dose;
   final String time;
-  final bool taken;
 
-  const _MedItem({
-    required this.emoji,
-    required this.bg,
-    required this.name,
-    required this.time,
-    required this.taken,
-  });
+  const _MedItem({required this.name, required this.dose, required this.time});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(12),
-            ),
+                color: AppColors.rose50,
+                borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
-            child: Text(emoji, style: const TextStyle(fontSize: 16)),
+            child: const Text('💊', style: TextStyle(fontSize: 16)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -717,27 +693,102 @@ class _MedItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, style: AppTextStyles.bodySemiBold),
-                Text(time, style: AppTextStyles.caption),
+                Text(dose.isNotEmpty ? '$dose · $time' : time,
+                    style: AppTextStyles.caption),
               ],
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: taken ? AppColors.sage100 : AppColors.plum700,
+              color: AppColors.sage100,
               borderRadius: BorderRadius.circular(999),
             ),
-            child: Text(
-              taken ? '✓ Taken' : 'Mark',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: taken ? AppColors.sage700 : Colors.white,
-              ),
-            ),
+            child: Text('Take', style: AppTextStyles.caption.copyWith(
+                color: AppColors.sage700, fontWeight: FontWeight.w700)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Quick Actions Row ────────────────────────────────────────────────────────
+
+class _QuickActionsRow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _QuickAction(
+          emoji: '🩺',
+          label: 'Log\nSymptoms',
+          color: AppColors.rose100,
+          onTap: () {},
+        ),
+        const SizedBox(width: 10),
+        _QuickAction(
+          emoji: '💧',
+          label: 'Add\nWater',
+          color: const Color(0xFFE3F2FD),
+          onTap: () {},
+        ),
+        const SizedBox(width: 10),
+        _QuickAction(
+          emoji: '🌙',
+          label: 'Log\nSleep',
+          color: AppColors.sage100,
+          onTap: () => context.push('/sleep'),
+        ),
+        const SizedBox(width: 10),
+        _QuickAction(
+          emoji: '💊',
+          label: 'Meds',
+          color: AppColors.plum100,
+          onTap: () => context.push('/medications'),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickAction({
+    required this.emoji,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 22)),
+              const SizedBox(height: 6),
+              Text(label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.neutral600)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -748,59 +799,47 @@ class _MedItem extends StatelessWidget {
 class _TipBanner extends StatelessWidget {
   const _TipBanner();
 
+  static const _tips = [
+    ('🚶', 'Move every hour', 'Short walks improve circulation and focus.'),
+    ('🥗', 'Eat the rainbow', 'Colourful foods pack more micronutrients.'),
+    ('😮‍💨', 'Box breathing', 'Inhale 4s · Hold 4s · Exhale 4s · Hold 4s.'),
+    ('☀️', 'Morning sunlight', '10 min of sunlight resets your body clock.'),
+  ];
+
   @override
   Widget build(BuildContext context) {
+    final tip = _tips[DateTime.now().day % _tips.length];
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [AppColors.sage50, AppColors.plum50],
+          colors: [AppColors.plum800, AppColors.plum700],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.sage200),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowDark,
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: const Text('💡', style: TextStyle(fontSize: 18)),
-          ),
-          const SizedBox(width: 12),
+          Text(tip.$1, style: const TextStyle(fontSize: 28)),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "Today's Tip",
-                  style: AppTextStyles.label.copyWith(
-                    color: AppColors.sage700,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'You slept 45 min less than usual. Try a 10-min wind-down routine tonight.',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.neutral600,
-                    fontSize: 11,
-                  ),
-                ),
+                Text('Daily Tip',
+                    style: AppTextStyles.caption
+                        .copyWith(color: Colors.white54)),
+                const SizedBox(height: 2),
+                Text(tip.$2,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+                const SizedBox(height: 2),
+                Text(tip.$3,
+                    style: const TextStyle(
+                        fontSize: 11, color: Colors.white70)),
               ],
             ),
           ),

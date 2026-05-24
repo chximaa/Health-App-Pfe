@@ -56,20 +56,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ).animate().fadeIn(duration: 400.ms),
 
             // ── Quick chips ───────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: Row(
-                children: [
-                  _QuickChip(emoji: '⭐', label: 'Reviews'),
-                  const SizedBox(width: 10),
-                  _QuickChip(emoji: '💳', label: 'Payments'),
-                  const SizedBox(width: 10),
-                  _QuickChip(emoji: '🔔', label: 'Alerts'),
-                ],
-              ),
-            ).animate().fadeIn(delay: 80.ms, duration: 350.ms),
-
-            const SizedBox(height: 14),
+            
 
             // ── Health Profile group ──────────────────────────────────────
             _MenuGroup(
@@ -80,21 +67,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   emoji: '👤',
                   title: 'Personal Information',
                   sub: 'Name, DOB, gender',
-                  onTap: () {},
+                  onTap: () => context.go('/profile/personal-info'),
                 ),
                 _MenuItem(
                   iconBg: AppColors.sage100,
                   emoji: '🏥',
                   title: 'Medical History',
                   sub: 'Conditions, allergies',
-                  onTap: () {},
+                  onTap: () => context.push('/medical-history'),
                 ),
                 _MenuItem(
                   iconBg: AppColors.rose100,
                   emoji: '💊',
-                  title: 'Current Medications',
-                  sub: '3 active',
-                  onTap: () {},
+                  title: 'Track Medications',
+                  sub: 'Manage & schedule doses',
+                  onTap: () => context.push('/medications'),
                 ),
               ],
             ).animate().fadeIn(delay: 120.ms, duration: 350.ms),
@@ -109,16 +96,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   iconBg: AppColors.sage100,
                   emoji: '🔔',
                   title: 'Notifications',
-                  sub: _notifications ? 'Active' : 'Off',
-                  trailing: Switch(
-                    value: _notifications,
-                    onChanged: (v) => setState(() => _notifications = v),
-                    activeColor: AppColors.plum700,
-                    trackColor: WidgetStateProperty.resolveWith((s) =>
-                        s.contains(WidgetState.selected)
-                            ? AppColors.plum700
-                            : AppColors.border),
-                  ),
+                  sub: 'Manage reminders & alerts',
+                  onTap: () => context.push('/notifications'),
                 ),
                 _MenuItem(
                   iconBg: AppColors.plum100,

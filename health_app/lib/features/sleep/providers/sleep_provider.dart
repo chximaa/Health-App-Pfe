@@ -28,6 +28,47 @@ class SleepState {
       isLoading: isLoading ?? this.isLoading,
     );
   }
+
+  /// Weekly hours data for the analytics chart (most-recent-first → reversed for chart)
+  List<double> get weeklyHours =>
+      recentLogs.take(7).map((l) => _safeDuration(l)).toList().reversed.toList();
+
+  /// Labels for the weekly chart
+  static List<String> get weekLabels => ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  /// Average sleep duration over recent logs
+  double get averageHours {
+    if (recentLogs.isEmpty) return 0;
+    final total =
+        recentLogs.map((l) => _safeDuration(l)).reduce((a, b) => a + b);
+    return total / recentLogs.length;
+  }
+
+  // ── Safely extract duration_hours from a log entry ──────────────────────
+  // FIX: The backend may return duration_hours calculated incorrectly
+  // (e.g. as sum of hours instead of difference). We always prefer to
+  // compute from sleep_start / sleep_end when both are present, falling
+  // back to duration_hours only if the computed value would be nonsensical.
+  static double _safeDuration(Map<String, dynamic> log) {
+    final rawHours = (log['duration_hours'] as num?)?.toDouble();
+
+    // Try computing from start/end timestamps first
+    final startStr = log['sleep_start'] as String?;
+    final endStr = log['sleep_end'] as String?;
+    if (startStr != null && endStr != null) {
+      try {
+        final start = DateTime.parse(startStr);
+        final end = DateTime.parse(endStr);
+        final computed = end.difference(start).inMinutes / 60.0;
+        // If the computed value is reasonable (0–16 h) use it
+        if (computed >= 0 && computed <= 16) return computed;
+      } catch (_) {}
+    }
+
+    // Fallback to server's field, guard against obviously wrong values
+    if (rawHours != null && rawHours >= 0 && rawHours <= 16) return rawHours;
+    return 0;
+  }
 }
 
 class SleepNotifier extends StateNotifier<SleepState> {
@@ -38,14 +79,16 @@ class SleepNotifier extends StateNotifier<SleepState> {
   Future<void> loadRecent() async {
     state = state.copyWith(isLoading: true);
     try {
-      final response = await _client.get('/sleep', queryParameters: {'limit': 7});
+      final response =
+          await _client.get('/sleep', queryParameters: {'limit': 7});
       final data = response.data as Map<String, dynamic>;
       final logs =
           List<Map<String, dynamic>>.from(data['logs'] as List? ?? []);
+
       double lastHours = 0;
       int lastQuality = 0;
       if (logs.isNotEmpty) {
-        lastHours = (logs.first['duration_hours'] as num?)?.toDouble() ?? 0;
+        lastHours = SleepState._safeDuration(logs.first);
         lastQuality = (logs.first['quality'] as num?)?.toInt() ?? 0;
       }
       state = SleepState(
@@ -64,10 +107,26 @@ class SleepNotifier extends StateNotifier<SleepState> {
     required int quality,
     String? notes,
   }) async {
+    // ── FIX: Compute duration correctly on the client side ──────────────────
+    // This guards against backend bugs where duration_hours is calculated
+    // as hour1 + hour2 (which gives ~31) instead of the actual difference.
+    final durationHours =
+        sleepEnd.difference(sleepStart).inMinutes / 60.0;
+
+    // Sanity check — duration must be positive and ≤ 24 h
+    if (durationHours <= 0 || durationHours > 24) return false;
+
+    // Optimistic update so UI reflects correctly even before server responds
+    state = state.copyWith(
+      lastNightHours: durationHours,
+      lastNightQuality: quality,
+    );
+
     try {
       await _client.post('/sleep', data: {
         'sleep_start': sleepStart.toIso8601String(),
         'sleep_end': sleepEnd.toIso8601String(),
+        'duration_hours': durationHours, // pass explicitly so backend stores correct value
         'quality': quality,
         'notes': notes,
       });

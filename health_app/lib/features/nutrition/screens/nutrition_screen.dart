@@ -1,126 +1,258 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../water/providers/water_provider.dart';
 
-class NutritionScreen extends StatefulWidget {
+class NutritionScreen extends ConsumerStatefulWidget {
   const NutritionScreen({super.key});
 
   @override
-  State<NutritionScreen> createState() => _NutritionScreenState();
+  ConsumerState<NutritionScreen> createState() => _NutritionScreenState();
 }
 
-class _NutritionScreenState extends State<NutritionScreen> {
-  int _selectedQuality = 2; // 0=Poor, 1=Fair, 2=Good, 3=Excellent
-  double _waterGoal = 2500;
-  int _waterConsumed = 1850;
+class _NutritionScreenState extends ConsumerState<NutritionScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _fillController;
+  late Animation<double> _fillAnim;
+  double _previousFill = 0;
 
-  final List<double> _sleepData = [6.5, 7.2, 5.2, 8.0, 7.8, 8.5, 8.3];
-  final List<String> _days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  @override
+  void initState() {
+    super.initState();
+    _fillController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _fillAnim = const AlwaysStoppedAnimation(0);
+    Future.microtask(() => ref.read(waterProvider.notifier).loadToday());
+  }
 
-  void _addWater(int ml) {
-    setState(() {
-      _waterConsumed = (_waterConsumed + ml).clamp(0, 5000);
-    });
+  @override
+  void dispose() {
+    _fillController.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(double target) {
+    _fillAnim = Tween<double>(begin: _previousFill, end: target).animate(
+      CurvedAnimation(parent: _fillController, curve: Curves.easeOutCubic),
+    );
+    _fillController.forward(from: 0);
+    _previousFill = target;
+  }
+
+  Future<void> _addWater() async {
+    final ml = await _showAmountDialog(context, isAdding: true);
+    if (ml != null && ml > 0) {
+      await ref.read(waterProvider.notifier).addWater(ml);
+      final glasses = ref.read(waterProvider).glasses;
+      _animateTo(glasses.last);
+    }
+  }
+
+  Future<void> _removeWater() async {
+    final ml = await _showAmountDialog(context, isAdding: false);
+    if (ml != null && ml > 0) {
+      await ref.read(waterProvider.notifier).removeWater(ml);
+      final glasses = ref.read(waterProvider).glasses;
+      _animateTo(glasses.last);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final sleepHours = _sleepData.last;
-    final sleepGoal = 8.0;
-    final sleepPct = (sleepHours / sleepGoal).clamp(0.0, 1.0);
-    final waterPct = (_waterConsumed / _waterGoal).clamp(0.0, 1.0);
+    final water = ref.watch(waterProvider);
+    final glasses = water.glasses;
+    final totalPct =
+        (water.totalMl / AppConstants.dailyWaterGoalMl).clamp(0.0, 1.0);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Sleep Header ──────────────────────────────────────────────
-            _SleepHeader(
-              sleepHours: sleepHours,
-              sleepPct: sleepPct,
-            ).animate().fadeIn(duration: 400.ms),
+            // ── Header ────────────────────────────────────────────────────
+            _WaterHeader(totalMl: water.totalMl, totalPct: totalPct)
+                .animate()
+                .fadeIn(duration: 400.ms),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 20),
 
-            // ── Sleep quality card ────────────────────────────────────────
+            // ── Daily goal progress bar ───────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _SleepQualityCard(
-                selected: _selectedQuality,
-                onSelect: (i) => setState(() => _selectedQuality = i),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _DailyGoalBar(
+                totalMl: water.totalMl,
+                goalMl: AppConstants.dailyWaterGoalMl,
+                pct: totalPct,
               ),
-            ).animate().fadeIn(delay: 80.ms, duration: 350.ms),
+            ).animate().fadeIn(delay: 60.ms, duration: 350.ms),
 
+            const SizedBox(height: 24),
+
+            // ── Glasses row ───────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text('Today\'s Glasses', style: AppTextStyles.sectionTitle),
+            ),
             const SizedBox(height: 12),
 
-            // ── Weekly sleep chart ────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _SleepChartCard(
-                data: _sleepData,
-                days: _days,
+            SizedBox(
+              height: 170,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: glasses.length + 1, // +1 for the "next empty" glass
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, i) {
+                  // Empty "next" glass at the end
+                  if (i == glasses.length) {
+                    return AnimatedWaterGlass(
+                      fillFraction: 0.0,
+                      mlLabel: '0 ml',
+                      isActive: false,
+                      isEmpty: true,
+                    ).animate().fadeIn(delay: Duration(milliseconds: 80 * i));
+                  }
+                  final fill = glasses[i];
+                  final ml = i < glasses.length - 1
+                      ? 250
+                      : water.currentGlassMl == 0 && water.totalMl > 0
+                          ? 250
+                          : water.currentGlassMl;
+                  return AnimatedWaterGlass(
+                    fillFraction: fill,
+                    mlLabel: '${ml} ml',
+                    isActive: i == glasses.length - 1,
+                    isEmpty: false,
+                    fillAnimation: i == glasses.length - 1 ? _fillAnim : null,
+                  ).animate().fadeIn(delay: Duration(milliseconds: 80 * i));
+                },
               ),
-            ).animate().fadeIn(delay: 140.ms, duration: 350.ms),
+            ),
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
 
-            // ── Water tracker card ────────────────────────────────────────
+            // ── Action buttons ────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _WaterTrackerCard(
-                consumed: _waterConsumed,
-                goal: _waterGoal.toInt(),
-                pct: waterPct,
-                onAdd: _addWater,
-              ),
-            ).animate().fadeIn(delay: 200.ms, duration: 350.ms),
-
-            const SizedBox(height: 12),
-
-            // ── Wednesday alert ───────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.rose50,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.rose200),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('⚠️', style: TextStyle(fontSize: 18)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Wednesday Alert',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.rose700,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'Only 5.2h — below 6h minimum. Reflected in your health score.',
-                            style: AppTextStyles.caption
-                                .copyWith(color: AppColors.neutral600),
-                          ),
-                        ],
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _removeWater,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border, width: 1.5),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.remove_rounded,
+                                color: AppColors.rose500, size: 18),
+                            const SizedBox(width: 6),
+                            Text('Remove',
+                                style: AppTextStyles.bodySemiBold
+                                    .copyWith(color: AppColors.rose500)),
+                          ],
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: GestureDetector(
+                      onTap: _addWater,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [AppColors.plum900, AppColors.plum700],
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.plum900.withOpacity(0.30),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.add_rounded,
+                                color: Colors.white, size: 18),
+                            const SizedBox(width: 6),
+                            Text('Add Water',
+                                style: AppTextStyles.bodySemiBold
+                                    .copyWith(color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ).animate().fadeIn(delay: 260.ms, duration: 350.ms),
+            ).animate().fadeIn(delay: 120.ms, duration: 350.ms),
+
+            const SizedBox(height: 20),
+
+            // ── Stats row ─────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      emoji: '🥛',
+                      label: 'Glasses',
+                      value: '${water.fullGlasses + (water.currentGlassMl > 0 ? 1 : 0)}',
+                      sub: 'of day',
+                      bg: AppColors.plum50,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatCard(
+                      emoji: '💧',
+                      label: 'Total',
+                      value:
+                          '${(water.totalMl / 1000).toStringAsFixed(2)} L',
+                      sub: 'today',
+                      bg: AppColors.sage50,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatCard(
+                      emoji: '🎯',
+                      label: 'Goal',
+                      value:
+                          '${(AppConstants.dailyWaterGoalMl / 1000).toStringAsFixed(1)} L',
+                      sub: 'remaining: ${((AppConstants.dailyWaterGoalMl - water.totalMl).clamp(0, 9999) / 1000).toStringAsFixed(2)} L',
+                      bg: AppColors.rose50,
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fadeIn(delay: 160.ms, duration: 350.ms),
+
+            // ── Hydration tips ────────────────────────────────────────────
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _HydrationTips(pct: totalPct),
+            ).animate().fadeIn(delay: 200.ms, duration: 350.ms),
 
             const SizedBox(height: 100),
           ],
@@ -130,523 +262,312 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 }
 
-// ─── Sleep Header ─────────────────────────────────────────────────────────────
+// ─── Amount Input Dialog ──────────────────────────────────────────────────────
 
-class _SleepHeader extends StatelessWidget {
-  final double sleepHours;
-  final double sleepPct;
+Future<int?> _showAmountDialog(BuildContext context,
+    {required bool isAdding}) async {
+  final ctrl = TextEditingController();
+  final presets = [100, 150, 200, 250, 330, 500];
 
-  const _SleepHeader({required this.sleepHours, required this.sleepPct});
+  return showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => StatefulBuilder(builder: (ctx, setS) {
+      return Padding(
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Text(
+                isAdding ? 'How much water? 💧' : 'Remove how much? 💧',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.plum900,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Preset chips
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: presets.map((ml) {
+                  return GestureDetector(
+                    onTap: () => Navigator.pop(ctx, ml),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.plum50,
+                        borderRadius: BorderRadius.circular(999),
+                        border:
+                            Border.all(color: AppColors.plum200, width: 1.5),
+                      ),
+                      child: Text(
+                        '${ml} ml',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: AppColors.plum700,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+
+              const SizedBox(height: 16),
+
+              Text('Or enter custom amount:',
+                  style: AppTextStyles.caption),
+              const SizedBox(height: 8),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: ctrl,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        hintText: 'e.g. 175',
+                        suffixText: 'ml',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      final v = int.tryParse(ctrl.text);
+                      if (v != null && v > 0) Navigator.pop(ctx, v);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.plum700,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: const Text('Add'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }),
+  );
+}
+
+// ─── Water Header ─────────────────────────────────────────────────────────────
+
+class _WaterHeader extends StatelessWidget {
+  final int totalMl;
+  final double totalPct;
+  const _WaterHeader({required this.totalMl, required this.totalPct});
 
   @override
   Widget build(BuildContext context) {
-    final h = sleepHours.floor();
-    final m = ((sleepHours - h) * 60).round();
-
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.plum900, Color(0xFF5C3060), AppColors.plum600],
+          colors: [Color(0xFF1A6B9A), Color(0xFF2196F3)],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(36),
           bottomRight: Radius.circular(36),
         ),
       ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -60,
-            right: -50,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
-              ),
-            ),
-          ),
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-              child: Column(
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  // Title row
-                  Row(
+                  const Text('💧', style: TextStyle(fontSize: 28)),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'Sleep & ',
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'Wellness',
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.plum300,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ],
-                          ),
+                      Text(
+                        'Hydration',
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Tonight\'s Sleep Goal',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withOpacity(0.44),
+                      Text(
+                        'Today\'s water tracker',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withOpacity(0.55)),
                       ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Ring
-                  SizedBox(
-                    width: 144,
-                    height: 144,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CustomPaint(
-                          size: const Size(144, 144),
-                          painter: _SleepRingPainter(progress: sleepPct),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              'hours',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withOpacity(0.42),
-                              ),
-                            ),
-                            Text(
-                              '${(sleepPct * 100).round()}% of goal',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.plum300,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Bed/wake pills
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _TimePill(label: 'Bed Time', value: '11:00 PM'),
-                      const SizedBox(width: 12),
-                      _TimePill(label: 'Wake Up', value: '07:20 AM'),
                     ],
                   ),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimePill extends StatelessWidget {
-  final String label;
-  final String value;
-  const _TimePill({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 9,
-                  color: Colors.white.withOpacity(0.4),
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: GoogleFonts.playfairDisplay(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SleepRingPainter extends CustomPainter {
-  final double progress;
-  const _SleepRingPainter({required this.progress});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = (size.shortestSide - 16) / 2;
-
-    canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..color = Colors.white.withOpacity(0.10)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 8);
-
-    canvas.drawArc(
-      Rect.fromCircle(center: c, radius: r),
-      -math.pi / 2,
-      progress.clamp(0, 1) * 2 * math.pi,
-      false,
-      Paint()
-        ..color = AppColors.plum300
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _SleepRingPainter old) =>
-      old.progress != progress;
-}
-
-// ─── Sleep Quality Card ───────────────────────────────────────────────────────
-
-class _SleepQualityCard extends StatelessWidget {
-  final int selected;
-  final ValueChanged<int> onSelect;
-
-  const _SleepQualityCard({required this.selected, required this.onSelect});
-
-  static const _opts = [
-    ('😔', 'Poor'),
-    ('😐', 'Fair'),
-    ('😊', 'Good'),
-    ('😄', 'Excl.'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: cardDecoration(),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                    text: 'Sleep ',
-                    style: AppTextStyles.cardTitle),
-                TextSpan(
-                  text: 'Quality',
-                  style: AppTextStyles.cardTitle
-                      .copyWith(
-                          color: AppColors.plum500,
-                          fontStyle: FontStyle.italic),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: _opts.asMap().entries.map((e) {
-              final i = e.key;
-              final opt = e.value;
-              final isOn = selected == i;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => onSelect(i),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: EdgeInsets.only(right: i < 3 ? 8 : 0),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color:
-                          isOn ? AppColors.plum700 : Colors.transparent,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isOn ? AppColors.plum700 : AppColors.border,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(opt.$1, style: const TextStyle(fontSize: 20)),
-                        const SizedBox(height: 4),
-                        Text(
-                          opt.$2,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: isOn
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                            color: isOn
-                                ? Colors.white
-                                : AppColors.neutral500,
-                          ),
-                        ),
-                      ],
+              const SizedBox(height: 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${(totalMl / 1000).toStringAsFixed(2)}',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -2,
                     ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Sleep Chart Card ────────────────────────────────────────────────────────
-
-class _SleepChartCard extends StatelessWidget {
-  final List<double> data;
-  final List<String> days;
-
-  const _SleepChartCard({required this.data, required this.days});
-
-  @override
-  Widget build(BuildContext context) {
-    final maxH = data.reduce(math.max);
-
-    return Container(
-      decoration: cardDecoration(),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(text: 'Weekly ', style: AppTextStyles.cardTitle),
-                TextSpan(
-                  text: 'Chart',
-                  style: AppTextStyles.cardTitle
-                      .copyWith(
-                          color: AppColors.plum500,
-                          fontStyle: FontStyle.italic),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'Avg ${(data.reduce((a, b) => a + b) / data.length).toStringAsFixed(1)}h · Quality: Good',
-            style: AppTextStyles.caption,
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 80,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: data.asMap().entries.map((e) {
-                final i = e.key;
-                final h = e.value;
-                final barH = (h / maxH) * 68;
-                final isToday = i == data.length - 1;
-                final isLow = h < 6;
-
-                Color barColor;
-                if (isLow) {
-                  barColor = AppColors.rose400;
-                } else if (isToday) {
-                  barColor = AppColors.plum500;
-                } else {
-                  final colors = [
-                    AppColors.plum400,
-                    AppColors.plum300,
-                    AppColors.plum500,
-                    AppColors.plum300,
-                    AppColors.plum700,
-                    AppColors.plum800,
-                  ];
-                  barColor = colors[i % colors.length];
-                }
-
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      width: 28,
-                      height: barH,
-                      decoration: BoxDecoration(
-                        color: barColor,
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(6)),
-                        border: isToday
-                            ? Border.all(color: AppColors.plum700, width: 2)
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      days[i],
+                  const SizedBox(width: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'L / ${(AppConstants.dailyWaterGoalMl / 1000).toStringAsFixed(1)} L',
                       style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: isToday
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: isLow
-                            ? AppColors.rose600
-                            : isToday
-                                ? AppColors.plum900
-                                : AppColors.neutral400,
+                        fontSize: 14,
+                        color: Colors.white.withOpacity(0.65),
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
-                );
-              }).toList(),
-            ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${(totalPct * 100).round()}%',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-// ─── Water Tracker Card ───────────────────────────────────────────────────────
+// ─── Daily Goal Bar ───────────────────────────────────────────────────────────
 
-class _WaterTrackerCard extends StatelessWidget {
-  final int consumed;
-  final int goal;
+class _DailyGoalBar extends StatelessWidget {
+  final int totalMl;
+  final int goalMl;
   final double pct;
-  final ValueChanged<int> onAdd;
 
-  const _WaterTrackerCard({
-    required this.consumed,
-    required this.goal,
-    required this.pct,
-    required this.onAdd,
-  });
+  const _DailyGoalBar(
+      {required this.totalMl, required this.goalMl, required this.pct});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: cardDecoration(),
       padding: const EdgeInsets.all(16),
+      decoration: cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('💧 Water Intake', style: AppTextStyles.cardTitle),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.sage50,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.sage200),
-                ),
-                child: Text(
-                  '${(pct * 100).round()}%',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.sage700,
-                  ),
+              Text('Daily Goal Progress', style: AppTextStyles.cardTitle),
+              Text(
+                '${totalMl} / ${goalMl} ml',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.plum700,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          // Progress
-          Row(
-            children: [
-              Text(
-                '${(consumed / 1000).toStringAsFixed(2)} L',
-                style: GoogleFonts.playfairDisplay(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.plum900,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '/ ${(goal / 1000).toStringAsFixed(1)}L goal',
-                style: AppTextStyles.caption,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 6,
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: AnimatedFractionallySizedBox(
-                duration: const Duration(milliseconds: 300),
-                widthFactor: pct.clamp(0.0, 1.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.sage500,
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: pct.clamp(0, 1)),
+            duration: const Duration(milliseconds: 800),
+            curve: Curves.easeOutCubic,
+            builder: (_, val, __) {
+              return Column(
+                children: [
+                  ClipRRect(
                     borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      value: val,
+                      minHeight: 12,
+                      backgroundColor: AppColors.neutral100,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        pct >= 1.0
+                            ? AppColors.sage600
+                            : const Color(0xFF2196F3),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          // Quick add buttons
-          Row(
-            children: [
-              _WaterBtn(label: '+150ml', onTap: () => onAdd(150)),
-              const SizedBox(width: 8),
-              _WaterBtn(label: '+250ml', onTap: () => onAdd(250)),
-              const SizedBox(width: 8),
-              _WaterBtn(label: '+500ml', onTap: () => onAdd(500)),
-            ],
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('0 L', style: AppTextStyles.caption),
+                      Text(
+                        pct >= 1.0
+                            ? '🎉 Goal reached!'
+                            : '${((1 - pct) * goalMl / 1000).toStringAsFixed(2)} L remaining',
+                        style: AppTextStyles.caption.copyWith(
+                          color: pct >= 1.0
+                              ? AppColors.sage600
+                              : AppColors.neutral500,
+                          fontWeight: pct >= 1.0 ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                      Text(
+                        '${(goalMl / 1000).toStringAsFixed(1)} L',
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -654,33 +575,265 @@ class _WaterTrackerCard extends StatelessWidget {
   }
 }
 
-class _WaterBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _WaterBtn({required this.label, required this.onTap});
+// ─── Animated Water Glass ─────────────────────────────────────────────────────
+
+class AnimatedWaterGlass extends StatelessWidget {
+  final double fillFraction; // 0.0 – 1.0
+  final String mlLabel;
+  final bool isActive;
+  final bool isEmpty;
+  final Animation<double>? fillAnimation;
+
+  const AnimatedWaterGlass({
+    super.key,
+    required this.fillFraction,
+    required this.mlLabel,
+    required this.isActive,
+    required this.isEmpty,
+    this.fillAnimation,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.sage100,
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.sage200),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.sage700,
+    final effectiveFill = fillAnimation ?? AlwaysStoppedAnimation(fillFraction);
+
+    return AnimatedBuilder(
+      animation: effectiveFill,
+      builder: (_, __) {
+        final fill = isEmpty ? 0.0 : effectiveFill.value;
+        return Column(
+          children: [
+            // Glass widget
+            Container(
+              width: 72,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isActive
+                      ? const Color(0xFF2196F3)
+                      : AppColors.border,
+                  width: isActive ? 2.0 : 1.5,
+                ),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFF2196F3).withOpacity(0.2),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    // Water fill
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutCubic,
+                        height: 120 * fill,
+                        child: CustomPaint(
+                          painter: _WaterPainter(
+                            fill: fill,
+                            color: isEmpty
+                                ? Colors.transparent
+                                : isActive
+                                    ? const Color(0xFF42A5F5)
+                                    : const Color(0xFF1976D2),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Shimmer layer
+                    if (fill > 0.1)
+                      Positioned(
+                        bottom: 0,
+                        left: 8,
+                        right: 8,
+                        child: SizedBox(
+                          height: 120 * fill,
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Container(
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Empty label
+                    if (isEmpty)
+                      Center(
+                        child: Text(
+                          '+',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w200,
+                            color: AppColors.neutral300,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
+
+            const SizedBox(height: 8),
+
+            // ml label
+            Text(
+              isEmpty ? 'Next' : mlLabel,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: isActive
+                    ? const Color(0xFF1976D2)
+                    : AppColors.neutral400,
+              ),
+            ),
+            if (!isEmpty)
+              Text(
+                '${(fill * 100).round()}%',
+                style: AppTextStyles.caption.copyWith(fontSize: 9),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _WaterPainter extends CustomPainter {
+  final double fill;
+  final Color color;
+  const _WaterPainter({required this.fill, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (fill <= 0) return;
+    final paint = Paint()..color = color;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaterPainter old) =>
+      old.fill != fill || old.color != color;
+}
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+class _StatCard extends StatelessWidget {
+  final String emoji;
+  final String label;
+  final String value;
+  final String sub;
+  final Color bg;
+
+  const _StatCard({
+    required this.emoji,
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.bg,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 20)),
+          const SizedBox(height: 6),
+          Text(value,
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              )),
+          Text(label, style: AppTextStyles.caption),
+          const SizedBox(height: 2),
+          Text(sub,
+              style: AppTextStyles.caption.copyWith(fontSize: 9),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Hydration Tips ───────────────────────────────────────────────────────────
+
+class _HydrationTips extends StatelessWidget {
+  final double pct;
+  const _HydrationTips({required this.pct});
+
+  @override
+  Widget build(BuildContext context) {
+    final tips = pct >= 1.0
+        ? [
+            ('🎉', 'Goal reached!', 'Excellent hydration today.'),
+            ('💪', 'Keep it up', 'Stay consistent tomorrow.'),
+          ]
+        : pct >= 0.5
+            ? [
+                ('💧', 'Halfway there', 'Drink a glass every hour.'),
+                ('⏰', 'Set reminders', 'Regular sips beat large gulps.'),
+              ]
+            : [
+                ('⚠️', 'Low hydration', 'Drink 2–3 glasses now.'),
+                ('🥤', 'Quick tip', 'Start with a large glass of water.'),
+              ];
+
+    return Container(
+      decoration: cardDecoration(),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Hydration Tips', style: AppTextStyles.cardTitle),
+          const SizedBox(height: 12),
+          ...tips.map((t) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t.$1, style: const TextStyle(fontSize: 20)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(t.$2, style: AppTextStyles.bodySemiBold),
+                          Text(t.$3,
+                              style: AppTextStyles.caption),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
       ),
     );
   }

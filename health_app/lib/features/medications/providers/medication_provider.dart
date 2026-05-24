@@ -12,6 +12,7 @@ class Medication {
   final DateTime? endDate;
   final String? notes;
   final bool isActive;
+  final bool isTaken;
 
   const Medication({
     this.id,
@@ -23,6 +24,7 @@ class Medication {
     this.endDate,
     this.notes,
     this.isActive = true,
+    this.isTaken = false,
   });
 
   factory Medication.fromJson(Map<String, dynamic> json) {
@@ -39,6 +41,7 @@ class Medication {
           : null,
       notes: json['notes'] as String?,
       isActive: json['is_active'] as bool? ?? true,
+      isTaken: json['is_taken'] as bool? ?? false,
     );
   }
 
@@ -51,6 +54,7 @@ class Medication {
         'end_date': endDate?.toIso8601String().split('T').first,
         'notes': notes,
         'is_active': isActive,
+        'is_taken': isTaken,
       };
 
   String get frequencyLabel {
@@ -158,3 +162,4 @@ final medicationProvider =
     StateNotifierProvider<MedicationNotifier, MedicationState>((ref) {
   return MedicationNotifier(ref.watch(apiClientProvider));
 });
+

@@ -78,6 +78,10 @@ class ProfileModel {
   final String? bloodType;
   final List<String> medicalConditions;
   final List<String> allergies;
+  // ── Extended fields ───────────────────────────────────────────────────────
+  final String? activityLevel;      // 'low' | 'moderate' | 'high'
+  final List<String> chronicConditions;
+  final List<String> healthConditions;
 
   const ProfileModel({
     required this.userId,
@@ -89,6 +93,9 @@ class ProfileModel {
     this.bloodType,
     this.medicalConditions = const [],
     this.allergies = const [],
+    this.activityLevel,
+    this.chronicConditions = const [],
+    this.healthConditions = const [],
   });
 
   int? get age {
@@ -116,6 +123,11 @@ class ProfileModel {
       medicalConditions:
           List<String>.from(json['medical_conditions'] as List? ?? []),
       allergies: List<String>.from(json['allergies'] as List? ?? []),
+      activityLevel: json['activity_level'] as String?,
+      chronicConditions:
+          List<String>.from(json['chronic_conditions'] as List? ?? []),
+      healthConditions:
+          List<String>.from(json['health_conditions'] as List? ?? []),
     );
   }
 
@@ -129,5 +141,8 @@ class ProfileModel {
         'blood_type': bloodType,
         'medical_conditions': medicalConditions,
         'allergies': allergies,
+        'activity_level': activityLevel,
+        'chronic_conditions': chronicConditions,
+        'health_conditions': healthConditions,
       };
 }
